@@ -1,0 +1,208 @@
+# ============================================================
+# AgentForge — 多 Agent 协作调度平台 配置文件
+# ============================================================
+# 修改此文件即可调整 Agent 能力、分类规则、流水线定义
+# 不需要改代码
+
+# ── 你的 Agent 军团 ──
+agents:
+  opencode:
+    description: "DeepSeek — 主力编码，全栈开发"
+    cli: "opencode"
+    capabilities:
+      coding: 0.95
+      architecture: 0.90
+      fullstack: 0.88
+      debugging: 0.75
+      review: 0.60
+      testing: 0.55
+      reasoning: 0.80
+      quick_fix: 0.70
+      documentation: 0.70
+    tech_preference:
+      - typescript
+      - react
+      - vue
+      - node.js
+      - python
+
+  claudecode:
+    description: "GLM — 审查官 + 技术分析 + 备选编码"
+    cli: "claude"
+    capabilities:
+      coding: 0.72
+      architecture: 0.75
+      fullstack: 0.60
+      debugging: 0.75
+      review: 0.95
+      testing: 0.55
+      reasoning: 0.92
+      quick_fix: 0.60
+      documentation: 0.92
+    tech_preference:
+      - any
+
+  codex:
+    description: "GPT — Bug修复专家 + 备选编码(配额有限)"
+    cli: "codex"
+    capabilities:
+      coding: 0.75
+      architecture: 0.55
+      fullstack: 0.50
+      debugging: 0.92
+      review: 0.60
+      testing: 0.50
+      reasoning: 0.72
+      quick_fix: 0.95
+      documentation: 0.50
+    tech_preference:
+      - any
+
+  agy:
+    description: "Gemini — 测试编写 + 质量验证"
+    cli: "agy"
+    capabilities:
+      coding: 0.65
+      architecture: 0.60
+      fullstack: 0.55
+      debugging: 0.70
+      review: 0.70
+      testing: 0.95
+      reasoning: 0.75
+      quick_fix: 0.55
+      documentation: 0.75
+      verification: 0.95
+    tech_preference:
+      - any
+
+# ── 任务分类规则 ──
+# 按顺序匹配，命中即返回。越靠前优先级越高。
+# 原则：具体类型在前，通用类型在后
+classifier:
+  rules:
+    - type: testing
+      keywords: ["测试", "test", "用例", "验证", "验收", "spec", "单元测试"]
+      targets: []
+
+    - type: review
+      keywords: ["审查", "review", "检查", "有什么问题", "code review", "check", "audit", "inspect"]
+      targets: []
+
+    - type: bugfix
+      keywords: ["修复", "bug", "报错", "异常", "不对", "坏了", "解决", "fix", "error", "broken", "crash"]
+      targets: []
+
+    - type: refactor
+      keywords: ["重构", "优化", "改进", "提升", "整理", "refactor", "optimize", "improve"]
+      targets: []
+
+    - type: documentation
+      keywords: ["文档", "注释", "readme", "document", "说明", "docs", "documentation"]
+      targets: []
+
+    - type: analysis
+      keywords: ["分析", "解释", "为什么", "原理", "对比", "选型", "建议", "analyze", "explain", "compare"]
+      targets: []
+
+    - type: coding
+      keywords: ["写", "开发", "实现", "新建", "创建", "搭建", "生成", "写个", "build", "create", "implement", "develop", "write", "make", "code", "add", "编写"]
+      targets: []
+
+  # 兜底：什么都没匹配到时
+  fallback: coding
+
+# ── 任务类型 → 能力维度权重 ──
+# 用于计算每个 Agent 的匹配得分
+# 经验证：coding→opencode / review→claudecode / bugfix→codex / testing→agy / analysis→claudecode / refactor→opencode / documentation→claudecode
+match_weights:
+  coding:
+    coding: 1.0
+    architecture: 0.6
+    fullstack: 0.5
+  review:
+    review: 1.0
+    reasoning: 0.6
+    documentation: 0.3
+  bugfix:
+    debugging: 1.0
+    quick_fix: 0.9
+    coding: 0.4
+  testing:
+    testing: 1.0
+    verification: 0.8
+    debugging: 0.3
+  analysis:
+    reasoning: 1.0
+    review: 0.5
+    architecture: 0.4
+  refactor:
+    coding: 1.0
+    architecture: 0.7
+    review: 0.3
+  documentation:
+    documentation: 1.0
+    reasoning: 0.5
+    review: 0.3
+
+# ── 执行配置 ──
+executor:
+  timeout_seconds: 120        # 单个 Agent 超时
+  work_dir: "./sessions"      # 工作目录根路径
+
+# ── 流水线定义 (v0.2) ──
+pipelines:
+  full_dev_cycle:
+    description: "完整开发周期：编码 → 审查 → 修复(条件) → 测试"
+    stages:
+      - id: coding
+        type: coding
+        prompt: '{original_task}'
+
+      - id: review
+        type: review
+        prompt: |
+          原始任务: {original_task}
+
+          以下代码已写入工作目录，请审查：
+          {previous_files}
+
+          请逐一审查这些文件，指出代码问题、安全隐患和改进建议。
+          如果发现了任何需要修复的问题，请在回复末尾添加标记：
+
+          __HAS_ISSUES__
+
+          如果代码完全没问题，请回复"代码审查通过，未发现问题"即可。
+        pass_files: true
+
+      - id: bugfix
+        type: bugfix
+        prompt: |
+          原始任务: {original_task}
+
+          代码审查发现了以下问题：
+
+          {previous_stdout}
+
+          项目文件位于工作目录中：
+          {all_files}
+
+          请逐一修复上述所有问题。
+        pass_files: true
+        condition:
+          stage: review
+          marker: "__HAS_ISSUES__"
+          fallback_check: true
+
+      - id: testing
+        type: testing
+        prompt: |
+          原始任务: {original_task}
+
+          项目文件位于工作目录中：
+          {all_files}
+
+          已完成阶段摘要:
+          {stages_summary}
+
+          请为核心业务逻辑编写全面的测试用例，包括单元测试和必要的集成测试。
+        pass_files: true

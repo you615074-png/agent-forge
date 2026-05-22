@@ -1,0 +1,6 @@
+__pycache__/
+sessions/
+*.pyc
+.DS_Store
+simple_test.txt
+test_output.txt
