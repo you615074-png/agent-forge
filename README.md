@@ -1,103 +1,104 @@
-# 🎯 AgentForge — 多 Agent 协作调度平台 v0.1
+# AgentForge — 多 Agent 协作调度平台 v0.2
 
-> 本地 CLI Agent 自动分发调度 | Python 脚本 | 零依赖框架
+> 本地 CLI Agent 智能分发调度 | 单任务 + 4 阶段流水线 | 零依赖框架
 
 ---
 
 ## 是什么
 
-把你在本地跑的 4 个 CLI Agent（opencode / claudecode / codex / agy）串成一个智能分发系统。
-
-**不是让 Agent 互相聊天**，而是：你下达一个任务 → AgentForge 自动判断该谁干 → 调那个 Agent 干活 → 汇报结果。
+把你在本地跑的 4 个 CLI Agent 串成一个智能调度系统。
 
 ```
-你: "帮我写一个用户登录接口"
-                     │
-                     ▼
-         ┌─────────────────────┐
-         │    AgentForge        │
-         │                     │
-         │ ① 分类: 编码开发     │
-         │ ② 匹配: opencode    │
-         │ ③ 执行: 调 CLI      │
-         │ ④ 汇总: 结果+产出   │
-         └─────────────────────┘
-                     │
-         ┌───────────┘
-         ▼
-    opencode "帮我写一个用户登录接口"
-         │
-         ▼
-    ✅ 完成 | 3.2s | 产出: auth/login.ts
+forge "用 React 写一个计算器"
+        │
+        ▼
+┌──────────────────────────────────────────────┐
+│              AgentForge                       │
+│                                              │
+│  Stage 1: coding  → opencode  (DeepSeek)     │
+│  Stage 2: review  → claudecode (GLM)         │
+│  Stage 3: bugfix  → codex     (GPT)          │
+│  Stage 4: testing → agy       (Gemini)       │
+│                                              │
+│  共享工作目录     上下文自动传递     归档存档   │
+└──────────────────────────────────────────────┘
 ```
+
+**不是让 Agent 互相聊天**，而是任务自动路由 → Agent 接力干活 → 汇总结果。
 
 ---
 
-## 安装
-
-### 前置条件
-
-- **Python 3.8+**
-- 本地已安装的 CLI Agent（至少一个）：
-  - [opencode](https://github.com/sst/opencode) — 全栈开发
-  - [claude code](https://docs.anthropic.com/en/docs/claude-code) — 代码审查
-  - [codex](https://github.com/openai/codex) — Bug 修复
-  - [agy](https://github.com/nickcernis/agy) — 测试编写
-
-### 安装步骤
+## 快速开始
 
 ```bash
-# 1. 把 agent-forge 放到你想放的位置
-git clone <your-repo> agent-forge
+# 1. 克隆
+git clone https://github.com/you615074-png/agent-forge.git
 cd agent-forge
 
-# 2. 安装 PyYAML（唯一依赖）
+# 2. 安装唯一依赖
 pip install pyyaml
 
-# 3. 试跑
-python orchestrator.py --mock "帮我写一个JWT认证中间件"
+# 3. 一行开干
+py forge.py --mock "用 React 写一个计算器"    # mock 先试
+py forge.py "用 React 写一个计算器"            # 真实执行
 ```
 
 ---
 
 ## 使用
 
-### 单任务分发
+### `forge` 智能启动器（推荐）
 
 ```bash
-python orchestrator.py "你的任务描述"
+forge "build a login page"          # 走流水线（默认）
+forge -s "fix the broken middleware" # 强制单任务
+forge --mock "test"                 # 模拟模式
+forge                                # 交互 REPL
 ```
 
-### 模拟模式（不真实调 Agent，测试用）
+### 交互 REPL
 
 ```bash
-python orchestrator.py --mock "review 一下这段代码"
+forge> build a calculator           # 流水线
+forge> s fix the auth bug           # 单任务
+forge> mock on                      # 切 mock
+forge> quit
 ```
 
----
+### 原始 CLI（仍可用）
 
-## 支持的 7 种任务类型
+```bash
+# 流水线模式
+python orchestrator.py --pipeline full_dev_cycle "your task"
 
-| 类型 | 说这个它就会识别 |
-|:---|:---|
-| 🔨 编码开发 | 写/开发/实现/搭建 + 接口/模块/项目 |
-| 🔍 代码审查 | 审查/review/检查/有什么问题 |
-| 🐛 Bug修复 | 修复/改/bug/报错/异常/解决 |
-| 🧪 测试编写 | 测试/test/用例/验证/单元测试 |
-| 🧠 技术分析 | 分析/解释/原理/对比/选型 |
-| ♻️ 重构优化 | 重构/优化/改进/提升 |
-| 📄 文档编写 | 文档/注释/readme/说明 |
+# 单任务模式（v0.1 兼容）
+python orchestrator.py "your task"
+```
 
 ---
 
 ## Agent 军团
 
-| Agent | 擅长 | 能力 |
-|:---|:---|:---|
-| **opencode** | 编码开发、项目搭建 | 编码 0.90 / 架构 0.85 |
-| **claudecode** | 代码审查、逻辑分析 | 审查 0.95 / 推理 0.90 |
-| **codex** | Bug修复、快速生成 | 修复 0.95 / 调试 0.90 |
-| **agy** | 测试编写、质量验证 | 测试 0.90 / 验证 0.90 |
+| Agent | 模型 | 角色 | 核心能力 |
+|---|---|---|---|
+| opencode | DeepSeek | 主力编码 + 全栈开发 | coding 0.95 / architecture 0.90 |
+| claudecode | GLM | 代码审查 + 技术分析 | review 0.95 / reasoning 0.92 |
+| codex | GPT | Bug 修复（配额保护） | debugging 0.92 / quick_fix 0.95 |
+| agy | Gemini | 测试编写 + 质量验证 | testing 0.95 / verification 0.95 |
+
+**GPT 配额保护**：codex 仅在 bugfix 类型胜出，其他任务类型不会匹配到它。
+
+---
+
+## 流水线设计
+
+```
+coding (DeepSeek)  ──→  review (GLM)  ──→  bugfix (GPT)  ──→  testing (Gemini)
+                                          ↑                    │
+                                    仅当审查发现问题时    共享工作目录中接力
+```
+
+每个阶段产出的文件对后续阶段可见，上下文通过 prompt 模板自动传递。
 
 ---
 
@@ -105,62 +106,72 @@ python orchestrator.py --mock "review 一下这段代码"
 
 ```
 agent-forge/
-├── orchestrator.py      # 主入口（你运行这个）
-├── classifier.py        # 任务分类器
-├── matcher.py           # 能力匹配引擎
-├── executor.py          # CLI 执行器
-├── forge.yaml           # 配置文件（改这个不改代码）
-├── README.md            # 本文档
-└── sessions/            # 每次任务的完整存档
-    └── task-20260522-190000-a1b2c3d4/
-        ├── prompt.txt           # 发给 Agent 的完整 prompt
-        ├── opencode_output.txt  # Agent 输出
-        └── result.json          # 结构化结果
+├── forge.py              # 智能启动器 + 交互 REPL
+├── forge.bat             # Windows 命令行包装
+├── orchestrator.py       # 主入口（双路径调度）
+├── pipeline.py           # 流水线执行引擎 (v0.2)
+├── classifier.py         # 关键词分类器
+├── matcher.py            # 能力加权匹配引擎
+├── executor.py           # CLI 执行器 + 会话管理
+├── forge.yaml            # 全局配置（Agent/规则/权重/流水线）
+└── sessions/             # 每次任务的完整存档
+    └── pipeline-20260522-190000-a1b2c3d4/
+        ├── _stage_coding_prompt.txt
+        ├── _stage_coding_output.txt
+        ├── _stage_review_prompt.txt
+        ├── ...
+        ├── pipeline_result.json
+        └── src/           # Agent 产出的实际代码
 ```
 
 ---
 
 ## 配置
 
-所有配置在 `forge.yaml` 中，无需改代码：
+所有配置在 `forge.yaml` 中，不需要改代码：
 
 ```yaml
 # 添加新 Agent
 agents:
   my_new_agent:
-    cli: "my_cli_command"        # 终端命令
+    cli: "my_cli_command"
     capabilities:
-      coding: 0.80               # 能力评分 0-1
+      coding: 0.80
       review: 0.60
-      ...
 
-# 添加新分类
-classifier:
-  rules:
-    - type: my_task_type
-      keywords: ["我的关键词1", "关键词2"]
+# 添加新流水线
+pipelines:
+  my_pipeline:
+    stages:
+      - id: step1
+        type: coding
+        prompt: "{original_task}"
+      - id: step2
+        type: review
+        prompt: "审查: {all_files}"
 ```
+
+---
+
+## 设计原则
+
+1. **调度器是死程序，不是 Agent** — 关键词 + 加权匹配，不做 AI 决策
+2. **每次调用是新会话** — `subprocess.run([cli, task])`，用完即走
+3. **成果在磁盘上** — 所有 Agent 共享工作目录，代码产出直接可见
+4. **流水线阶段跳过分类器** — 阶段类型已在 YAML 声明，不走路由避免误判
+5. **失败不阻断** — 任一阶段失败继续后续，最终汇总标状态
 
 ---
 
 ## 路线图
 
 | 版本 | 功能 | 状态 |
-|:---:|------|:---:|
-| **v0.1** | 单任务分发（分类+匹配+执行） | ✅ 当前 |
-| v0.2 | 流水线接力（编码→审查→修复→测试） | 🔜 |
-| v0.3 | 多方案对比（同任务发给所有 Agent） | 📋 |
-| v0.4 | 上下文存档 + 历史回溯 | 📋 |
-| v0.5 | 自我进化权重（根据成功率调整） | 📋 |
-
----
-
-## 设计原则
-
-1. **Orchestrator 是固定程序，不是 Agent** — 调度逻辑不需要 AI，关键词+权重就够了
-2. **每次调 Agent 是新会话，不是持续对话** — `subprocess.run(["opencode", task])`，用完即走
-3. **成果在磁盘上，不在 stdout 里** — Agent 把产出发到 stdout，但代码写在工作目录的磁盘文件里
-4. **你能看懂每一行** — 三个模块加起来不到 300 行 Python，没框架、没魔法
+|---|---|---|
+| v0.1 | 单任务分发（分类+匹配+执行） | DONE |
+| v0.2 | 流水线接力 + forge 启动器 + runner-up 降级 | DONE |
+| v0.3 | 多方案对比（同任务发给所有 Agent） | TODO |
+| v0.4 | 上下文存档 + 历史回溯 + 断点恢复 | TODO |
+| v0.5 | 自我进化权重（根据成功率调整） | TODO |
 
 ---
 
