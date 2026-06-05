@@ -518,6 +518,146 @@ def cmd_model(args: list, ctx: dict) -> str:
     )
 
 
+# ── /switch ──
+
+@register_command(
+    "switch",
+    description="Switch all agents to a provider profile (deepseek/anthropic/openai/gemini)",
+    aliases=["sw"],
+    usage="/switch [profile-name]",
+    category="config",
+)
+def cmd_switch(args: list, ctx: dict) -> str:
+    """
+    Switch all agents to use a predefined provider profile.
+    Reads profiles from forge.yaml and applies them to the agents section
+    using targeted field replacement (preserves file formatting).
+
+    Examples:
+      /switch deepseek    — all agents → DeepSeek
+      /switch anthropic   — all agents → Anthropic (Claude)
+      /switch openai      — all agents → OpenAI (GPT)
+      /switch gemini      — all agents → Gemini
+      /switch             — list available profiles
+    """
+    import re
+    import yaml as _yaml
+
+    config = ctx.get("config", {})
+    config_path = ctx.get("config_path", "")
+    if not config_path:
+        config_path = os.path.join(os.path.dirname(__file__), "forge.yaml")
+
+    profiles = config.get("profiles", {})
+
+    if not args:
+        if not profiles:
+            return "No profiles defined in forge.yaml. Add a 'profiles' section."
+        lines = ["Available profiles (use /switch <name>):"]
+        for name, profile in profiles.items():
+            desc = profile.get("description", "")
+            agent_count = len(profile.get("agents", {}))
+            lines.append(f"  {name:<14s} — {desc} ({agent_count} agents)")
+        return "\n".join(lines)
+
+    profile_name = args[0]
+    profile = profiles.get(profile_name)
+
+    if not profile:
+        available = list(profiles.keys())
+        return (
+            f"Unknown profile '{profile_name}'.\n"
+            f"  Available: {', '.join(available)}"
+        )
+
+    profile_agents = profile.get("agents", {})
+
+    # Read the raw forge.yaml text
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw_text = f.read()
+    except Exception as e:
+        return f"Error reading forge.yaml: {e}"
+
+    # For each agent, replace provider/model/api_key_env/description fields
+    # using regex that matches the YAML structure
+    updated = []
+    errors = []
+
+    for agent_name, overrides in profile_agents.items():
+        # Match the agent block and replace specific fields
+        # Pattern: agent_name: followed by its fields
+        agent_pattern = re.compile(
+            rf'^  {re.escape(agent_name)}:\s*\n((?:    .*\n?)*)',
+            re.MULTILINE,
+        )
+        match = agent_pattern.search(raw_text)
+        if not match:
+            errors.append(f"{agent_name}: not found in forge.yaml")
+            continue
+
+        agent_block = match.group(0)
+        modified_block = agent_block
+
+        for field, value in overrides.items():
+            # Replace or insert the field
+            field_pattern = re.compile(
+                rf'(\n    {re.escape(field)}:\s*).*?(\n    \S|$)',
+                re.DOTALL,
+            )
+            if field_pattern.search(modified_block):
+                # Field exists — replace value
+                modified_block = field_pattern.sub(
+                    rf'\g<1>{value}\2', modified_block
+                )
+            else:
+                # Field doesn't exist — insert after the agent name line
+                lines = modified_block.split("\n")
+                # Insert after first line (agent name)
+                indent = "    "
+                lines.insert(1, f"{indent}{field}: {value}")
+                modified_block = "\n".join(lines)
+
+        raw_text = raw_text.replace(agent_block, modified_block)
+        updated.append(agent_name)
+
+        # Also update in-memory config
+        agents = config.get("agents", {})
+        if agent_name in agents:
+            for key, value in overrides.items():
+                agents[agent_name][key] = value
+
+    if not updated:
+        return f"No agents were updated. Errors: {', '.join(errors)}"
+
+    # Write back
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(raw_text)
+    except Exception as e:
+        return f"Error saving forge.yaml: {e}"
+
+    ctx["config"] = config
+    desc = profile.get("description", profile_name)
+    lines = [
+        f"Switched to: {profile_name}",
+        f"  {desc}",
+        f"  Updated: {', '.join(updated)}",
+    ]
+    if errors:
+        lines.append(f"  Warnings: {', '.join(errors)}")
+    lines.append("")
+    lines.append("  Agent configuration:")
+    agents = config.get("agents", {})
+    for name in updated:
+        agent = agents[name]
+        lines.append(f"  {name:<12s} → {agent['model']} ({agent['provider']})")
+    lines.append("")
+    lines.append("  Restart REPL or re-run your task to use the new profile.")
+
+    return "\n".join(lines)
+
+
 # ── /review ──
 
 @register_command(

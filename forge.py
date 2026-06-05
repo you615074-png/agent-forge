@@ -95,6 +95,7 @@ def _print_repl_help():
     /agents [name]      List agents or show agent detail
     /pipeline [name] <t>Run a named pipeline
     /model [name]       Show or set model
+    /switch [profile]   Switch provider profile (deepseek/anthropic/openai/gemini)
     /review [pattern]   Review code in workspace
     /test [args]        Run tests
     /file <path>        View a file with line numbers

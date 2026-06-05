@@ -256,7 +256,6 @@ def _execute_stage(
     agents: dict,
 ) -> dict:
     """Execute a single stage with runner-up fallback and retry."""
-    agent_config = agents[selected_agent]
     exec_label = agent_config.get("provider") or agent_config.get("cli", "?")
 
     print(f"\nExec: {selected_agent} ({exec_label})")

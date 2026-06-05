@@ -7,14 +7,50 @@
 #   2. pip install -r requirements.txt
 #   3. python forge.py "build a React calculator"
 #
-# Or use DeepSeek / OpenAI / Gemini:
-#   set DEEPSEEK_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY
-#   and change each agent's `provider` / `model` fields below.
+# Switch providers with one command (REPL):
+#   /switch deepseek     — all agents → DeepSeek
+#   /switch anthropic    — all agents → Anthropic (default)
+#   /switch openai       — all agents → OpenAI
+#   /switch gemini       — all agents → Gemini
 #
 # Slash Commands (REPL mode): /help /doctor /init /agents /pipeline ...
 # Web GUI: python forge.py --gui
 # API Server: python forge.py --serve 8080
 # ============================================================
+
+# ── Provider Profiles (for /switch command) ──
+profiles:
+  anthropic:
+    description: "All-Claude pipeline — one ANTHROPIC_API_KEY"
+    agents:
+      coder:      { provider: anthropic, model: claude-opus-4-8,   api_key_env: ANTHROPIC_API_KEY, description: "Claude Opus 4.8 — primary developer, full-stack" }
+      reviewer:   { provider: anthropic, model: claude-sonnet-4-6,  api_key_env: ANTHROPIC_API_KEY, description: "Claude Sonnet 4.6 — code reviewer + technical analysis" }
+      bugfixer:   { provider: anthropic, model: claude-sonnet-4-6,  api_key_env: ANTHROPIC_API_KEY, description: "Claude Sonnet 4.6 — bug fix specialist" }
+      tester:     { provider: anthropic, model: claude-haiku-4-5,   api_key_env: ANTHROPIC_API_KEY, description: "Claude Haiku 4.5 — test writer + quality verification" }
+
+  deepseek:
+    description: "Budget-friendly DeepSeek pipeline — one DEEPSEEK_API_KEY"
+    agents:
+      coder:      { provider: deepseek, model: deepseek-chat,       api_key_env: DEEPSEEK_API_KEY, description: "DeepSeek Chat — primary developer, full-stack" }
+      reviewer:   { provider: deepseek, model: deepseek-chat,       api_key_env: DEEPSEEK_API_KEY, description: "DeepSeek Chat — code reviewer + technical analysis" }
+      bugfixer:   { provider: deepseek, model: deepseek-chat,       api_key_env: DEEPSEEK_API_KEY, description: "DeepSeek Chat — bug fix specialist" }
+      tester:     { provider: deepseek, model: deepseek-chat,       api_key_env: DEEPSEEK_API_KEY, description: "DeepSeek Chat — test writer + quality verification" }
+
+  openai:
+    description: "GPT pipeline — one OPENAI_API_KEY"
+    agents:
+      coder:      { provider: openai, model: gpt-4.1,               api_key_env: OPENAI_API_KEY, description: "GPT-4.1 — primary developer, full-stack" }
+      reviewer:   { provider: openai, model: gpt-4.1,               api_key_env: OPENAI_API_KEY, description: "GPT-4.1 — code reviewer + technical analysis" }
+      bugfixer:   { provider: openai, model: gpt-4.1,               api_key_env: OPENAI_API_KEY, description: "GPT-4.1 — bug fix specialist" }
+      tester:     { provider: openai, model: gpt-4o,                api_key_env: OPENAI_API_KEY, description: "GPT-4o — test writer + quality verification" }
+
+  gemini:
+    description: "Gemini pipeline — one GEMINI_API_KEY"
+    agents:
+      coder:      { provider: gemini, model: gemini-2.5-pro,        api_key_env: GEMINI_API_KEY, description: "Gemini 2.5 Pro — primary developer, full-stack" }
+      reviewer:   { provider: gemini, model: gemini-2.5-pro,        api_key_env: GEMINI_API_KEY, description: "Gemini 2.5 Pro — code reviewer + technical analysis" }
+      bugfixer:   { provider: gemini, model: gemini-2.5-pro,        api_key_env: GEMINI_API_KEY, description: "Gemini 2.5 Pro — bug fix specialist" }
+      tester:     { provider: gemini, model: gemini-2.5-flash,      api_key_env: GEMINI_API_KEY, description: "Gemini 2.5 Flash — test writer + quality verification" }
 
 # ── Global API settings ──
 api:
