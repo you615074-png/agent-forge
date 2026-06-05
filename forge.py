@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AgentForge v0.5 — Smart Launcher
+AgentForge v0.5.1 — Smart Launcher
 
 用法:
   forge "task"              # 流水线 (默认)
@@ -21,6 +21,7 @@ Slash Commands (REPL):
   /agents     — 列出可用 Agent
   /pipeline   — 运行流水线
   /model      — 查看/切换模型
+  /switch     — 切换Provider配置
   /review     — 代码审查
   /test       — 运行测试
   /file       — 查看文件
@@ -38,107 +39,107 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from orchestrator import load_config, dispatch
 from pipeline import run_pipeline
+from console import cprint, header, section, Colors, bold, dim, green, cyan, magenta, ok
 
 PIPELINE_NAME = "full_dev_cycle"
 
 
 def _run_pipeline_wrapper(task: str, mock: bool):
     config = load_config()
-    run_pipeline(PIPELINE_NAME, task, config, mock=mock)
+    result = run_pipeline(PIPELINE_NAME, task, config, mock=mock)
+    return result.get("session_dir") if isinstance(result, dict) else None
 
 
 def _run_single_wrapper(task: str, mock: bool):
-    dispatch(task, mock=mock)
+    return dispatch(task, mock=mock)
 
 
 def _print_cli_help():
-    print("AgentForge v0.5 — Multi-Agent Orchestration Platform")
+    header("AgentForge v0.5 — Multi-Agent Orchestration Platform", 56)
     print()
-    print("用法:")
-    print('  forge "task"              # 流水线 (默认)')
-    print('  forge -s "task"           # 单任务')
-    print('  forge --mock "task"       # 流水线 + mock')
-    print('  forge -s --mock "task"    # 单任务 + mock')
-    print("  forge                     # 交互 REPL (支持 / 命令)")
-    print("  forge --gui               # 启动 Web GUI")
-    print("  forge --serve [port]      # 启动 API 服务器")
-    print("  forge --build-exe         # 打包为 .exe")
+    cprint("  Usage:", style=Colors.BOLD)
+    print(f'  {cyan("forge")} "task"              {dim("# Pipeline (default)")}')
+    print(f'  {cyan("forge")} -s "task"           {dim("# Single task")}')
+    print(f'  {cyan("forge")} --mock "task"       {dim("# Pipeline + mock")}')
+    print(f'  {cyan("forge")} -s --mock "task"    {dim("# Single task + mock")}')
+    print(f"  {cyan('forge')}                     {dim('# Interactive REPL (/ commands)')}")
+    print(f"  {cyan('forge')} --gui               {dim('# Launch Web GUI')}")
+    print(f"  {cyan('forge')} --serve [port]      {dim('# Start API server')}")
+    print(f"  {cyan('forge')} --build-exe         {dim('# Package as .exe')}")
     print()
-    print("示例:")
-    print('  forge "build a login page with React"')
-    print('  forge -s "fix the broken auth middleware"')
-    print('  forge --mock "test drive the pipeline"')
-    print('  forge                      # 进入交互模式')
+    cprint("  Examples:", style=Colors.BOLD)
+    print(f'  {cyan("forge")} "build a login page with React"')
+    print(f'  {cyan("forge")} -s "fix the broken auth middleware"')
+    print(f'  {cyan("forge")} --mock "test drive the pipeline"')
     print()
-    print("Slash Commands (REPL):")
-    print("  /help, /doctor, /init, /status, /agents, /pipeline,")
-    print("  /model, /review, /test, /file, /workspace, /config,")
-    print("  /git, /memory, /save, /clear")
+    cprint("  Slash Commands:", style=Colors.BOLD)
+    print(f"  {magenta('/help')}, {magenta('/doctor')}, {magenta('/init')}, {magenta('/status')}, {magenta('/agents')}, {magenta('/pipeline')},")
+    print(f"  {magenta('/model')}, {magenta('/switch')}, {magenta('/review')}, {magenta('/test')}, {magenta('/file')},")
+    print(f"  {magenta('/workspace')}, {magenta('/config')}, {magenta('/git')}, {magenta('/memory')}, {magenta('/save')}, {magenta('/clear')}")
 
 
 def _print_repl_help():
-    print("""
-  AgentForge v0.5 — Interactive REPL
-  ==================================
+    header("AgentForge v0.5 — Interactive REPL")
 
-  Quick Start:
-    <task>              Run task through pipeline (default)
-    s <task>            Run task as single task
-    mock on/off         Toggle mock mode
+    cprint("  Quick Start:", style=Colors.BOLD)
+    print(f"    {cyan('<task>')}              {dim('Run task through pipeline (default)')}")
+    print(f"    s <task>            {dim('Run task as single task')}")
+    print(f"    {green('mock on')}/off         {dim('Toggle mock mode')}")
 
-  Slash Commands (/):
-    /help               Show this help
-    /clear              Clear the screen
-    /doctor             Check system (Python, deps, API keys)
-    /init [name]        Initialize a new project
-    /status             Show current session status
-    /agents [name]      List agents or show agent detail
-    /pipeline [name] <t>Run a named pipeline
-    /model [name]       Show or set model
-    /switch [profile]   Switch provider profile (deepseek/anthropic/openai/gemini)
-    /review [pattern]   Review code in workspace
-    /test [args]        Run tests
-    /file <path>        View a file with line numbers
-    /workspace [dir]    Browse workspace
-    /config [show|set]  View or modify configuration
-    /git [status|commit|log]  Git operations
-    /memory             Show CLAUDE.md project knowledge
-    /save [file]        Save session summary
+    cprint("\n  Slash Commands:", style=Colors.BOLD)
+    commands_help = [
+        ("/help",           "Show this help"),
+        ("/clear",          "Clear the screen"),
+        ("/doctor",         "Check system (Python, deps, API keys)"),
+        ("/init [name]",    "Initialize a new project"),
+        ("/status",         "Show current session status"),
+        ("/agents [name]",  "List agents or show agent detail"),
+        ("/pipeline [n] <t>","Run a named pipeline"),
+        ("/model [name]",   "Show or set model"),
+        ("/switch [profile]","Switch provider profile"),
+        ("/review [pattern]","Review code in workspace"),
+        ("/test [args]",    "Run tests"),
+        ("/file <path>",    "View a file with line numbers"),
+        ("/workspace [dir]", "Browse workspace"),
+        ("/config [show|set]","View or modify configuration"),
+        ("/git [status|commit|log]","Git operations"),
+        ("/memory",         "Show CLAUDE.md project knowledge"),
+        ("/save [file]",    "Save session summary"),
+    ]
+    for cmd, desc in commands_help:
+        print(f"    {magenta(cmd):<22s} {desc}")
 
-  Control:
-    quit / exit         Leave the REPL
-    Ctrl+C              Cancel current operation
-""".strip())
+    cprint("\n  Control:", style=Colors.BOLD)
+    print(f"    {cyan('quit')} / exit         Leave the REPL")
+    print(f"    Ctrl+C              Cancel current operation")
 
 
 def interactive_mode():
     """Interactive REPL with slash-command support (v0.5)."""
-    print("=" * 57)
-    print("  AgentForge v0.5 — Interactive Mode")
-    print("=" * 57)
-    print("  Type /help for slash commands | help for quick ref")
-    print("  Type 'quit' or 'exit' to leave")
-    print()
+    header("AgentForge v0.5 — Interactive Mode", 57)
+    cprint(f"  Type {magenta('/help')} for slash commands | {cyan('help')} for quick ref", style=Colors.DIM)
+    cprint(f"  Type {cyan('quit')} or {cyan('exit')} to leave\n", style=Colors.DIM)
 
     mock_mode = False
     config = load_config()
     config_path = os.path.join(os.path.dirname(__file__), "forge.yaml")
     workspace = os.getcwd()
+    last_session_dir = None  # Track latest pipeline session
 
     # Build shared context for slash commands
     def _make_ctx():
         return {
             "config": config,
             "config_path": config_path,
-            "session_dir": None,
+            "session_dir": last_session_dir,
             "mock": mock_mode,
-            "workspace": workspace,
+            "workspace": last_session_dir or workspace,
             "model": "default",
         }
 
     while True:
         try:
-            raw = input("forge> ").strip()
+            raw = input(f"{Colors.GREEN}forge>{Colors.RESET} ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nBye!")
             break
@@ -173,12 +174,12 @@ def interactive_mode():
 
         if cmd == "mock on":
             mock_mode = True
-            print("[mock: ON] — Agent APIs will not be called")
+            cprint(f"  {ok('Mock ON')} — Agent APIs will not be called")
             continue
 
         if cmd == "mock off":
             mock_mode = False
-            print("[mock: OFF] — Live API mode")
+            cprint(f"  {green('Mock OFF')} — Live API mode")
             continue
 
         if cmd == "status":
@@ -194,14 +195,18 @@ def interactive_mode():
                 continue
             if mock_mode:
                 print(f"[mock] single task: {task[:60]}")
-            _run_single_wrapper(task, mock=mock_mode)
+            result = _run_single_wrapper(task, mock=mock_mode)
+            if isinstance(result, dict):
+                last_session_dir = result.get("session_dir", last_session_dir)
             continue
 
         # ── Default: pipeline ──
         task = raw
         if mock_mode:
             print(f"[mock] pipeline: {task[:60]}")
-        _run_pipeline_wrapper(task, mock=mock_mode)
+        sd = _run_pipeline_wrapper(task, mock=mock_mode)
+        if sd:
+            last_session_dir = sd
 
 
 # ═══════════════════════════════════════════════════════════════

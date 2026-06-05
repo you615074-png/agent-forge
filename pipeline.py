@@ -17,6 +17,11 @@ from typing import Dict, Any
 
 from matcher import match
 from executor import execute
+from console import (
+    cprint, header, section, stage_header, status_line,
+    agent_match, file_item, dim, bold, green, red, yellow, cyan, magenta,
+    ok, fail, Colors, STAGE_COLORS, Spinner,
+)
 
 
 # ── Type display names ──
@@ -87,12 +92,10 @@ def run_pipeline(pipeline_name: str, original_task: str,
         "The tests failed with:\n{test_output}\n\nFix the code AND tests to make everything pass."
     )
 
-    print("=" * 60)
-    print(f"  AgentForge v0.5 — Pipeline Mode")
-    print(f"  Pipeline: {pipeline_name} — {pipeline.get('description', '')}")
-    print("=" * 60)
-    print(f"\nTask: {original_task[:100]}")
-    print(f"Dir:  {session_dir}\n")
+    header(f"AgentForge v0.5 — {pipeline_name}", 60)
+    cprint(f"  {pipeline.get('description', '')}", style=Colors.DIM)
+    cprint(f"\n  {bold('Task:')} {original_task[:100]}")
+    cprint(f"  {bold('Dir:')}  {dim(session_dir)}\n")
 
     ctx: Dict[str, Any] = {
         "original_task": original_task,
@@ -107,10 +110,7 @@ def run_pipeline(pipeline_name: str, original_task: str,
         stage_type = stage["type"]
         stage_prompt_template = stage["prompt"]
 
-        print(f"\n{'─' * 60}")
-        print(f"  Stage {i + 1}/{len(stages)}: {stage_id} "
-              f"-> {_TYPE_NAMES.get(stage_type, stage_type)}")
-        print(f"{'─' * 60}\n")
+        stage_header(stage_id, stage_type, i + 1, len(stages), 60)
 
         # ── Condition check ──
         condition = stage.get("condition")
@@ -123,33 +123,31 @@ def run_pipeline(pipeline_name: str, original_task: str,
                 prev_data = ctx["stages"][cond_stage]
                 prev_out = prev_data.get("stdout", "")
                 if not prev_data.get("success", False):
-                    print(f"[SKIP] {stage_id} — "
-                          f"previous stage {cond_stage} failed")
+                    cprint(f"  {dim('⊘')} {stage_id} — previous stage {cond_stage} failed", style=Colors.DIM)
                     continue
                 if cond_marker not in prev_out:
-                    print(f"[SKIP] {stage_id} — "
-                          f"no trigger marker '{cond_marker}' found")
+                    cprint(f"  {dim('⊘')} {stage_id} — no trigger marker found", style=Colors.DIM)
                     continue
             elif not cond_fallback:
-                print(f"[SKIP] {stage_id} — "
-                      f"previous stage {cond_stage} not executed")
+                cprint(f"  {dim('⊘')} {stage_id} — previous stage not executed", style=Colors.DIM)
                 continue
 
         # ── Build prompt ──
         prompt = _build_prompt(stage_prompt_template, ctx, stage_id)
 
         prompt_preview = prompt[:200].replace("\n", "\n   ")
-        print(f"Prompt (first 200 chars):\n   {prompt_preview}...\n")
+        cprint(f"  Prompt: {dim(prompt_preview[:120] + '...')}")
 
         # ── Classify (from stage definition) ──
         task_type = stage_type
         type_label = _TYPE_NAMES.get(task_type, f"? {task_type}")
-        print(f"Classify: {type_label} (from stage definition)")
+        color = STAGE_COLORS.get(task_type, Colors.WHITE)
+        cprint(f"  {bold('Type:')} {color}{type_label}{Colors.RESET}")
 
         # ── Match ──
         match_result = match(task_type, agents, match_weights)
         if "error" in match_result:
-            print(f"[ERROR] Match failed: {match_result['error']}")
+            cprint(f"  {fail('Match')} {match_result['error']}")
             ctx["stages"][stage_id] = {
                 "id": stage_id, "type": stage_type,
                 "agent": "N/A", "stdout": "",
@@ -164,13 +162,16 @@ def run_pipeline(pipeline_name: str, original_task: str,
         score = match_result["score"]
         description = match_result["description"]
 
-        print(f"Match:    {selected_agent} "
-              f"(score: {score:.2f}) — {description}")
+        cprint(f"  {bold('Agent:')}  ", end="")
+        agent_match(selected_agent, score, description)
 
+        # Compact score bar
         for s in match_result["all_scores"]:
-            bar = "#" * int(s["score"] * 20)
-            marker = " <-" if s["name"] == selected_agent else ""
-            print(f"   {s['name']:12s} {s['score']:.2f} {bar}{marker}")
+            bar_len = int(s["score"] * 20)
+            bar = "█" * bar_len + "░" * (20 - bar_len)
+            marker = " ◀" if s["name"] == selected_agent else ""
+            sc = Colors.GREEN if s["score"] > 0.8 else Colors.YELLOW if s["score"] > 0.5 else Colors.RED
+            print(f"    {s['name']:<14s} {sc}{bar}{Colors.RESET} {s['score']:.2f}{marker}")
 
         # ── Execute (with v0.5 enhancements) ──
         result = _execute_stage(
@@ -200,10 +201,10 @@ def run_pipeline(pipeline_name: str, original_task: str,
         ctx["previous_stage"] = stage_id
 
         if result["success"]:
-            print(f"[OK] {stage_id} — {result['duration_ms']}ms")
+            cprint(f"  {ok()} {stage_id} {dim(f'— {result[\"duration_ms\"]}ms')}")
             if result.get("stdout"):
                 out_preview = result["stdout"][:200].replace("\n", "\n   ")
-                print(f"   output: {out_preview}")
+                cprint(f"    {dim(out_preview[:150])}")
 
             # ── v0.5: Git auto-commit after successful stage ──
             if git_auto_commit:
@@ -211,8 +212,8 @@ def run_pipeline(pipeline_name: str, original_task: str,
 
         else:
             err = result.get("error") or f"exit {result.get('exit_code')}"
-            print(f"[WARN] {stage_id} failed — {err}")
-            print(f"       Pipeline continues with subsequent stages")
+            cprint(f"  {yellow('⚠')} {stage_id} failed — {err}")
+            cprint(f"       Pipeline continues with subsequent stages", style=Colors.DIM)
 
         # ── v0.5: Test feedback loop ──
         if stage_type == "testing" and test_loop_enabled and result.get("success"):
@@ -239,7 +240,8 @@ def run_pipeline(pipeline_name: str, original_task: str,
     _print_summary(ctx)
     _save_summary(ctx, session_dir, pipeline_name)
 
-    return ctx["stages"]
+    # v0.5: return both stages and session_dir so callers can track where files live
+    return {"stages": ctx["stages"], "session_dir": session_dir}
 
 
 def _execute_stage(
@@ -258,7 +260,7 @@ def _execute_stage(
     """Execute a single stage with runner-up fallback and retry."""
     exec_label = agent_config.get("provider") or agent_config.get("cli", "?")
 
-    print(f"\nExec: {selected_agent} ({exec_label})")
+    cprint(f"\n  {bold('Exec:')} {cyan(selected_agent)} {dim(f'({exec_label})')}")
 
     if mock:
         return {
@@ -287,7 +289,7 @@ def _execute_stage(
     # ── Runner-up fallback ──
     if not result["success"] and match_result.get("runner_up"):
         runner = match_result["runner_up"]
-        print(f"   [FALLBACK] {selected_agent} failed, trying {runner}...")
+        cprint(f"     {yellow('↳')} {dim(selected_agent)} failed, trying {cyan(runner)}...")
         runner_agent = agents[runner]
         result = execute(
             agent_name=runner,
@@ -303,7 +305,7 @@ def _execute_stage(
 
     # ── v0.5: Retry with different prompt if stuck ──
     if not result["success"] and _should_retry(result):
-        print(f"   [RETRY] Agent may be stuck — retrying with clarified prompt...")
+        cprint(f"     {yellow('↻')} Agent may be stuck — retrying with clarified prompt...")
         retry_prompt = (
             f"{prompt}\n\n"
             f"IMPORTANT: Your previous attempt did not produce a valid result. "
@@ -358,14 +360,12 @@ def _run_test_feedback_loop(
 ):
     """Auto-fix failing tests and re-run, up to max_iterations."""
     for iteration in range(1, max_iterations + 1):
-        print(f"\n{'─' * 60}")
-        print(f"  Test Fix Loop — Iteration {iteration}/{max_iterations}")
-        print(f"{'─' * 60}\n")
+        section(f"Test Fix Loop — Iteration {iteration}/{max_iterations}", 60)
 
         # Use bugfixer agent to fix the failing tests
         bugfixer_config = agents.get("bugfixer")
         if not bugfixer_config:
-            print("[SKIP] No bugfixer agent configured")
+            cprint(f"  {dim('⊘')} No bugfixer agent configured")
             break
 
         fix_prompt = test_fix_prompt_template.replace("{test_output}", test_output[:3000])
@@ -389,7 +389,7 @@ def _run_test_feedback_loop(
         )
 
         if not fix_result.get("success"):
-            print(f"[WARN] Fix iteration {iteration} failed — stopping loop")
+            cprint(f"  {yellow('⚠')} Fix iteration {iteration} failed — stopping loop")
             _save_stage_result(ctx, f"{stage_id}_fix_{iteration}", {
                 "id": f"{stage_id}_fix_{iteration}",
                 "type": "bugfix",
@@ -405,7 +405,7 @@ def _run_test_feedback_loop(
         # Now re-run tests
         tester_config = agents.get("tester")
         if not tester_config:
-            print("[SKIP] No tester agent configured")
+            cprint(f"  {dim('⊘')} No tester agent configured")
             break
 
         re_test_prompt = (
@@ -418,7 +418,7 @@ def _run_test_feedback_loop(
         )
 
         from tools import get_tools_for_stage
-        print("Re-running tests after fix...\n")
+        cprint(f"  Re-running tests after fix...\n", style=Colors.DIM)
 
         re_test_result = execute(
             agent_name="tester",
@@ -445,18 +445,18 @@ def _run_test_feedback_loop(
 
         if re_test_result.get("success"):
             if not _has_test_failures(new_output) or "ALL TESTS PASSED" in new_output:
-                print(f"[OK] All tests pass after {iteration} fix iteration(s)!")
+                cprint(f"  {ok()} All tests pass after {iteration} fix iteration(s)!")
                 if git_auto_commit:
                     _git_auto_commit(session_dir, f"{stage_id}_fixed", original_task, git_commit_template)
                 break
             else:
-                print(f"[RETRY] Tests still failing — iteration {iteration} complete")
+                cprint(f"  {yellow('↻')} Tests still failing — iteration {iteration} complete")
                 test_output = new_output  # Use new failures as input for next iteration
         else:
-            print(f"[WARN] Re-test execution failed in iteration {iteration}")
+            cprint(f"  {yellow('⚠')} Re-test execution failed in iteration {iteration}")
             break
     else:
-        print(f"[WARN] Test fix loop exhausted ({max_iterations} iterations) — manual intervention needed")
+        cprint(f"  {yellow('⚠')} Test fix loop exhausted ({max_iterations} iterations) — manual intervention needed")
 
 
 def _save_stage_result(ctx: dict, stage_id: str, result: dict):
@@ -626,15 +626,20 @@ def _should_retry(result: dict) -> bool:
 def _print_summary(ctx: dict):
     """Print pipeline completion summary."""
     stages = ctx.get("stages", {})
-    print(f"\n{'=' * 60}")
-    print(f"  Pipeline Summary")
-    print(f"{'=' * 60}\n")
+    header("Pipeline Complete", 60)
 
     for sid, sdata in stages.items():
-        status = "[OK]" if sdata["success"] else "[FAIL]"
+        icon = ok() if sdata["success"] else fail()
         files_count = len(sdata.get("files", []))
-        print(f"  {status} {sid}: {sdata['agent']} "
-              f"({sdata.get('duration_ms', 0)}ms) — {files_count} files")
+        agent = cyan(sdata.get("agent", "?"))
+        dur = dim(f"{sdata.get('duration_ms', 0)}ms")
+        print(f"  {icon} {sid}: {agent} {dur} — {files_count} files")
+
+    # Total stats
+    success_count = sum(1 for s in stages.values() if s.get("success"))
+    total = len(stages)
+    total_dur = sum(s.get("duration_ms", 0) for s in stages.values())
+    cprint(f"\n  {success_count}/{total} stages passed in {total_dur}ms", style=Colors.BOLD)
 
 
 def _save_summary(ctx: dict, session_dir: str, pipeline_name: str):
@@ -662,5 +667,5 @@ def _save_summary(ctx: dict, session_dir: str, pipeline_name: str):
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
-    print(f"\nArchive: {session_dir}")
-    print(f"Summary: pipeline_result.json")
+    cprint(f"  Archive: {dim(session_dir)}")
+    cprint(f"  Summary: {dim('pipeline_result.json')}")

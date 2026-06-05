@@ -239,17 +239,24 @@ def _execute_api(
             max_retries=max_retries,
         )
 
-        # ── v0.4: Tool-enabled execution ──
+        # ── v0.5: Tool-enabled execution with plain-chat fallback ──
         # Map stage_prefix to stage type for tool selection
         stage_type = stage_prefix if stage_prefix else "coding"
         tools = get_tools_for_stage(stage_type)
 
-        response_text, tool_files = provider.chat_with_tools(
-            task=task,
-            tools=tools,
-            workspace_dir=session_dir,
-            max_turns=max_turns,
-        )
+        tool_files: list[dict] = []
+        try:
+            response_text, tool_files = provider.chat_with_tools(
+                task=task,
+                tools=tools,
+                workspace_dir=session_dir,
+                max_turns=max_turns,
+            )
+        except NotImplementedError:
+            # Provider doesn't support tool calling (e.g. Gemini) —
+            # fall back to plain chat() and extract code blocks from output
+            tool_files = []
+            response_text = provider.chat(task)
 
         duration_ms = int(
             (datetime.now() - start_time).total_seconds() * 1000

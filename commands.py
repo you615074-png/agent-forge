@@ -20,6 +20,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from console import (
+    cprint, header, section, dim, bold, green, red, yellow, cyan, magenta,
+    ok, fail, Colors, format_file_view, format_config_line, file_item,
+)
+
 # ── Command registry ──
 
 _COMMANDS: dict[str, dict] = {}
@@ -124,11 +129,12 @@ def cmd_help(args: list, ctx: dict) -> str:
         cmd_name = args[0].lstrip("/")
         cmd = _COMMANDS.get(cmd_name)
         if not cmd:
-            return f"No help for '/{cmd_name}' — command not found."
+            return f"No help for '{magenta(f'/{cmd_name}')}' — command not found."
+        aliases_str = ', '.join(magenta('/' + a) for a in cmd.get('aliases', [])) or dim('none')
         return (
-            f"/{cmd['name']} — {cmd['description']}\n"
+            f"{bold(magenta('/' + cmd['name']))} — {cmd['description']}\n"
             f"  Usage: {cmd['usage']}\n"
-            f"  Aliases: {', '.join('/' + a for a in cmd.get('aliases', [])) or 'none'}\n"
+            f"  Aliases: {aliases_str}\n"
             f"  Category: {cmd.get('category', 'general')}"
         )
 
@@ -142,25 +148,26 @@ def cmd_help(args: list, ctx: dict) -> str:
         cat = cmd.get("category", "general")
         categories.setdefault(cat, []).append(cmd)
 
+    # Build output as a string (returned, not printed)
     lines = [
-        "═" * 56,
-        "  AgentForge v0.5 — Slash Commands",
-        "═" * 56,
+        bold("═" * 56),
+        bold("  AgentForge v0.5 — Slash Commands"),
+        bold("═" * 56),
         "",
     ]
     for cat, cmds in sorted(categories.items()):
-        lines.append(f"  ── {cat.upper()} ──")
+        lines.append(bold(f"  ── {cat.upper()} ──"))
         for c in cmds:
             aliases = ""
             if c.get("aliases"):
-                aliases = f" (/{', /'.join(c['aliases'])})"
-            lines.append(f"  /{c['name']:<18s} {c['description']}{aliases}")
+                aliases = dim(f" (/{', /'.join(c['aliases'])})")
+            lines.append(f"  {magenta('/' + c['name']):<22s} {c['description']}{aliases}")
         lines.append("")
 
     lines.extend([
-        "  Type /help <command> for detailed usage.",
-        "  Use 'mock on' to toggle mock mode.",
-        "  Use 'quit' or 'exit' to leave.",
+        dim("  Type /help <command> for detailed usage."),
+        dim("  Use 'mock on' to toggle mock mode."),
+        dim("  Use 'quit' or 'exit' to leave."),
     ])
     return "\n".join(lines)
 
@@ -189,15 +196,16 @@ def cmd_clear(args: list, ctx: dict) -> str:
 )
 def cmd_doctor(args: list, ctx: dict) -> str:
     lines = [
-        "═" * 56,
-        "  AgentForge — System Check",
-        "═" * 56,
+        bold("═" * 56),
+        bold("  AgentForge — System Check"),
+        bold("═" * 56),
         "",
     ]
 
     # Python version
     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    lines.append(f"  Python:       {py_ver}  {'✓' if sys.version_info >= (3, 9) else '✗ (need 3.9+)'}")
+    py_ok = sys.version_info >= (3, 9)
+    lines.append(f"  {'Python:':<14s} {py_ver}  {ok() if py_ok else fail('need 3.9+')}")
 
     # Dependencies
     deps = {
@@ -209,9 +217,9 @@ def cmd_doctor(args: list, ctx: dict) -> str:
     for name, pkg in deps.items():
         try:
             __import__(pkg.replace("-", "_"))
-            lines.append(f"  {name:<14s} ✓ installed")
+            lines.append(f"  {name:<14s} {ok('installed')}")
         except ImportError:
-            lines.append(f"  {name:<14s} ✗ missing — pip install {pkg}")
+            lines.append(f"  {name:<14s} {fail('missing')} — pip install {pkg}")
 
     # API keys (from config or env)
     config = ctx.get("config", {})
@@ -224,29 +232,29 @@ def cmd_doctor(args: list, ctx: dict) -> str:
         providers_seen.add(provider)
         key_env = agent.get("api_key_env", "")
         key_val = os.getenv(key_env, "") if key_env else agent.get("api_key", "")
-        status = "✓ set" if key_val else "✗ not set"
-        lines.append(f"  {provider:<14s} {status}  ({key_env or 'inline'})")
+        status = ok("set") if key_val else fail("not set")
+        lines.append(f"  {provider:<14s} {status}  {dim(f'({key_env or \"inline\"})')}")
 
     # Git availability
     import subprocess
     try:
         result = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
         git_ver = result.stdout.strip().split()[-1] if result.stdout else "?"
-        lines.append(f"  git:          ✓ {git_ver}")
+        lines.append(f"  {'git:':<14s} {ok(git_ver)}")
     except Exception:
-        lines.append(f"  git:          ✗ not found (optional)")
+        lines.append(f"  {'git:':<14s} {dim('not found (optional)')}")
 
     # Tools
     lines.append("")
-    lines.append("  ── Agent Tools ──")
+    lines.append(bold("  ── Agent Tools ──"))
     from tools import ALL_TOOLS
     for name, tool in ALL_TOOLS.items():
-        danger = " ⚠ dangerous" if tool.dangerous else ""
-        lines.append(f"  {name:<14s} {tool.description[:50]}...{danger}")
+        danger = yellow(" ⚠ dangerous") if tool.dangerous else ""
+        lines.append(f"  {cyan(name):<14s} {tool.description[:50]}...{danger}")
 
     # Config
     lines.append("")
-    lines.append("  ── Configuration ──")
+    lines.append(bold("  ── Configuration ──"))
     lines.append(f"  Config file:  {ctx.get('config_path', 'forge.yaml')}")
     lines.append(f"  Agents:       {len(agents)}")
     pipelines = config.get("pipelines", {})
@@ -337,13 +345,16 @@ def cmd_init(args: list, ctx: dict) -> str:
 )
 def cmd_status(args: list, ctx: dict) -> str:
     mock = ctx.get("mock", False)
-    session_dir = ctx.get("session_dir", "(none)")
+    session_dir = ctx.get("session_dir", dim("(none)"))
     workspace = ctx.get("workspace", os.getcwd())
     model = ctx.get("model", "default")
 
+    mock_status = yellow("ON (no API calls)") if mock else green("OFF")
     lines = [
-        f"  Mock mode:    {'ON (no API calls)' if mock else 'OFF'}",
-        f"  Model:        {model}",
+        bold("  AgentForge Status"),
+        "",
+        f"  Mock mode:    {mock_status}",
+        f"  Model:        {cyan(model)}",
         f"  Workspace:    {workspace}",
         f"  Session dir:  {session_dir}",
     ]
@@ -356,9 +367,10 @@ def cmd_status(args: list, ctx: dict) -> str:
             reverse=True,
         )[:5]
         if sessions:
-            lines.append(f"  Recent sessions ({len(sessions)}):")
+            lines.append(f"\n  {bold('Recent sessions')} ({len(sessions)}):")
             for s in sessions[:5]:
-                lines.append(f"    {s}")
+                marker = cyan("●") if s == os.path.basename(session_dir or "") else dim("○")
+                lines.append(f"    {marker} {dim(s)}")
 
     return "\n".join(lines)
 
@@ -390,9 +402,9 @@ def cmd_agents(args: list, ctx: dict) -> str:
 
     # List all agents
     lines = [
-        "═" * 56,
-        "  Agent Legion",
-        "═" * 56,
+        bold("═" * 56),
+        bold("  Agent Legion"),
+        bold("═" * 56),
         "",
     ]
     for name, agent in agents.items():
@@ -401,13 +413,13 @@ def cmd_agents(args: list, ctx: dict) -> str:
         caps_str = ", ".join(f"{k}:{v:.0%}" for k, v in top_caps)
         provider = agent.get("provider", agent.get("cli", "?"))
         model = agent.get("model", "?")
-        lines.append(f"  {name:<12s} {model:<20s} via {provider}")
-        lines.append(f"  {'':12s} {agent.get('description', '')[:60]}")
-        lines.append(f"  {'':12s} top: {caps_str}")
+        lines.append(f"  {cyan(name):<14s} {model:<22s} {dim('via ' + provider)}")
+        lines.append(f"  {'':14s} {dim(agent.get('description', '')[:60])}")
+        lines.append(f"  {'':14s} {dim('top:')} {caps_str}")
         lines.append("")
 
     lines.append(f"  {len(agents)} agents total.")
-    lines.append("  /agents <name> for full capability breakdown.")
+    lines.append(f"  {magenta('/agents')} <name> for full capability breakdown.")
     return "\n".join(lines)
 
 
@@ -630,30 +642,67 @@ def cmd_switch(args: list, ctx: dict) -> str:
     if not updated:
         return f"No agents were updated. Errors: {', '.join(errors)}"
 
-    # Write back
+    # ── Backup + validate + write ──
+    # Keep a backup in case the regex corrupts the YAML
+    backup_path = config_path + ".bak"
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            backup_text = f.read()
+        with open(backup_path, "w", encoding="utf-8") as f:
+            f.write(backup_text)
+    except Exception:
+        backup_text = None  # Can't back up — proceed carefully
+
     try:
         with open(config_path, "w", encoding="utf-8") as f:
             f.write(raw_text)
     except Exception as e:
         return f"Error saving forge.yaml: {e}"
 
+    # Validate: does the result parse as valid YAML?
+    import yaml as _yaml2
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            _yaml2.safe_load(f)
+    except Exception as parse_err:
+        # Restore from backup
+        if backup_text is not None:
+            try:
+                with open(config_path, "w", encoding="utf-8") as f:
+                    f.write(backup_text)
+                return (
+                    f"{fail('Switch failed')}: invalid YAML after write — restored backup.\n"
+                    f"  Parse error: {parse_err}\n"
+                    f"  Your forge.yaml is unchanged."
+                )
+            except Exception:
+                pass
+        return f"{fail('Switch failed')}: produced invalid YAML: {parse_err}"
+
+    # Clean up backup on success
+    try:
+        if os.path.exists(config_path + ".bak"):
+            os.remove(config_path + ".bak")
+    except Exception:
+        pass
+
     ctx["config"] = config
     desc = profile.get("description", profile_name)
     lines = [
-        f"Switched to: {profile_name}",
-        f"  {desc}",
-        f"  Updated: {', '.join(updated)}",
+        f"  {ok('Switched to:')} {bold(profile_name)}",
+        f"  {dim(desc)}",
+        f"  {bold('Updated:')} {', '.join(cyan(a) for a in updated)}",
     ]
     if errors:
-        lines.append(f"  Warnings: {', '.join(errors)}")
+        lines.append(f"  {yellow('⚠')} Warnings: {', '.join(errors)}")
     lines.append("")
-    lines.append("  Agent configuration:")
+    lines.append(f"  {bold('Agent configuration:')}")
     agents = config.get("agents", {})
     for name in updated:
         agent = agents[name]
-        lines.append(f"  {name:<12s} → {agent['model']} ({agent['provider']})")
+        lines.append(f"  {cyan(name):<12s} → {agent['model']} {dim('(' + agent['provider'] + ')')}")
     lines.append("")
-    lines.append("  Restart REPL or re-run your task to use the new profile.")
+    lines.append(dim("  Re-run your task to use the new profile."))
 
     return "\n".join(lines)
 
@@ -766,10 +815,22 @@ def cmd_file(args: list, ctx: dict) -> str:
         return "Usage: /file <path>"
 
     ws = ctx.get("workspace", os.getcwd())
-    path = os.path.join(ws, args[0])
+    session_dir = ctx.get("session_dir", "")
 
-    if not os.path.exists(path):
-        return f"File not found: {args[0]}"
+    # Search order: 1) session_dir  2) workspace
+    search_dirs = [d for d in (session_dir, ws) if d]
+    found_path = None
+    for base in search_dirs:
+        candidate = os.path.join(base, args[0])
+        if os.path.exists(candidate):
+            found_path = candidate
+            break
+
+    if not found_path:
+        searched = "\n  ".join(search_dirs)
+        return f"File not found: {args[0]}\n  Searched in:\n  {searched}"
+
+    path = found_path
 
     if os.path.isdir(path):
         # List directory
@@ -788,27 +849,9 @@ def cmd_file(args: list, ctx: dict) -> str:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
     except Exception as e:
-        return f"Error reading file: {e}"
+        return f"{fail()} Error reading file: {e}"
 
-    size = len(content)
-    if size > 5000:
-        # Show head + tail with line numbers
-        lines = content.split("\n")
-        return (
-            f"File: {args[0]} ({size}B, {len(lines)} lines) — showing head+tail\n"
-            f"{'─' * 56}\n"
-            + "\n".join(f"{i + 1:4d}│ {l}" for i, l in enumerate(lines[:30]))
-            + f"\n  ... ({len(lines) - 60} lines omitted) ...\n"
-            + "\n".join(f"{i + 1:4d}│ {l}" for i, l in enumerate(lines[-30:], len(lines) - 30))
-        )
-
-    # Show with line numbers
-    lines = content.split("\n")
-    return (
-        f"File: {args[0]} ({size}B, {len(lines)} lines)\n"
-        f"{'─' * 56}\n"
-        + "\n".join(f"{i + 1:4d}│ {l}" for i, l in enumerate(lines))
-    )
+    return format_file_view(args[0], content)
 
 
 # ── /workspace ──
@@ -824,9 +867,12 @@ def cmd_workspace(args: list, ctx: dict) -> str:
     from workspace import list_workspace
 
     ws = ctx.get("workspace", os.getcwd())
-    subdir = args[0] if args else ws
+    session_dir = ctx.get("session_dir", "")
+    # Prefer session_dir for latest pipeline output, fall back to workspace
+    base = session_dir if session_dir and os.path.isdir(session_dir) else ws
+    subdir = args[0] if args else base
     if not os.path.isabs(subdir):
-        subdir = os.path.join(ws, subdir)
+        subdir = os.path.join(base, subdir)
 
     if not os.path.isdir(subdir):
         return f"Directory not found: {subdir}"
@@ -881,39 +927,39 @@ def cmd_config(args: list, ctx: dict) -> str:
 
 def _format_config_summary(config: dict) -> str:
     lines = [
-        "═" * 56,
-        "  Configuration",
-        "═" * 56,
+        bold("═" * 56),
+        bold("  Configuration"),
+        bold("═" * 56),
         "",
     ]
 
     # API settings
     api = config.get("api", {})
-    lines.append("  ── API ──")
+    lines.append(bold("  ── API ──"))
     for k, v in api.items():
-        lines.append(f"  {k}: {v}")
+        lines.append(format_config_line(k, v))
 
     # Agents
     agents = config.get("agents", {})
-    lines.append(f"\n  ── Agents ({len(agents)}) ──")
+    lines.append(f"\n  {bold('── Agents')} ({len(agents)}) {bold('──')}")
     for name, agent in agents.items():
         provider = agent.get("provider", "?")
         model = agent.get("model", "?")
-        lines.append(f"  {name}: {model} via {provider}")
+        lines.append(f"  {cyan(name)}: {model} {dim('via ' + provider)}")
 
     # Pipelines
     pipelines = config.get("pipelines", {})
-    lines.append(f"\n  ── Pipelines ({len(pipelines)}) ──")
+    lines.append(f"\n  {bold('── Pipelines')} ({len(pipelines)}) {bold('──')}")
     for name, pl in pipelines.items():
         stages = pl.get("stages", [])
         stage_ids = [s.get("id", "?") for s in stages]
-        lines.append(f"  {name}: {' → '.join(stage_ids)}")
+        lines.append(f"  {magenta(name)}: {' → '.join(stage_ids)}")
 
     # Executor
     exe = config.get("executor", {})
-    lines.append(f"\n  ── Executor ──")
+    lines.append(f"\n  {bold('── Executor')} {bold('──')}")
     for k, v in exe.items():
-        lines.append(f"  {k}: {v}")
+        lines.append(format_config_line(k, v))
 
     return "\n".join(lines)
 

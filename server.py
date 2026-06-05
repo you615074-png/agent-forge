@@ -147,12 +147,16 @@ def create_app() -> Flask:
             buf = io.StringIO()
             try:
                 with contextlib.redirect_stdout(buf):
-                    result = run_pipeline(pipeline_name, task, config, mock=mock)
+                    pipeline_result = run_pipeline(pipeline_name, task, config, mock=mock)
+
+                # run_pipeline returns {"stages": {...}, "session_dir": "..."}
+                stages_dict = pipeline_result.get("stages", {}) if isinstance(pipeline_result, dict) else {}
 
                 with _lock:
                     s = _sessions.get(session_id, {})
                     s["status"] = "completed"
                     s["completed_at"] = datetime.now().isoformat()
+                    s["session_dir"] = pipeline_result.get("session_dir", "") if isinstance(pipeline_result, dict) else ""
                     s["stages"] = {
                         sid: {
                             "id": sd.get("id", sid),
@@ -164,8 +168,8 @@ def create_app() -> Flask:
                             "files": [f["path"] for f in sd.get("files", [])],
                             "stdout_preview": (sd.get("stdout", "") or "")[:500],
                         }
-                        for sid, sd in result.items()
-                    } if isinstance(result, dict) else {}
+                        for sid, sd in stages_dict.items()
+                    } if isinstance(stages_dict, dict) else {}
             except Exception as e:
                 with _lock:
                     s = _sessions.get(session_id, {})

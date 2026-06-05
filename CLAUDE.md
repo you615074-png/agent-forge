@@ -16,16 +16,17 @@ User Input → forge.py → pipeline.py → executor.py → api_client.py → LL
 ### Key Modules
 
 1. **forge.py** — Smart launcher: CLI args, interactive REPL with slash commands, GUI/server modes
-2. **commands.py** — Slash command system: `/help`, `/doctor`, `/init`, `/agents`, `/pipeline`, `/model`, `/review`, `/test`, `/file`, `/workspace`, `/config`, `/git`, `/memory`, `/save`, `/clear`
-3. **pipeline.py** — Pipeline engine: 4-stage relay (coding→review→bugfix→testing), test feedback loop, git auto-commit
-4. **executor.py** — Dual-mode executor: CLI subprocess (backward compat) + API mode with tool_use
-5. **api_client.py** — Unified LLM API client: 4 providers with retry logic and tool_use loops
-6. **tools.py** — Agent tool system: read_file, write_file, bash, list_files, grep with safety checks
-7. **workspace.py** — Workspace manager: file listing, content reading, context inlining
-8. **classifier.py** — Keyword-based task classification
-9. **matcher.py** — Weighted capability scoring and agent selection
-10. **server.py** — Flask web GUI + REST API server
-11. **orchestrator.py** — Single-task dispatch (classify→match→execute)
+2. **commands.py** — Slash command system: `/help`, `/doctor`, `/init`, `/agents`, `/pipeline`, `/model`, `/review`, `/test`, `/file`, `/workspace`, `/config`, `/git`, `/memory`, `/save`, `/clear`, `/switch`
+3. **console.py** — ANSI-styled terminal output: colors, headers, stage icons, file views, spinners (zero-dependency)
+4. **pipeline.py** — Pipeline engine: 4-stage relay (coding→review→bugfix→testing), test feedback loop, git auto-commit
+5. **executor.py** — Dual-mode executor: CLI subprocess (backward compat) + API mode with tool_use + plain-chat fallback
+6. **api_client.py** — Unified LLM API client: 4 providers (Anthropic/OpenAI/Gemini/DeepSeek) with retry logic
+7. **tools.py** — Agent tool system: read_file, write_file, bash, list_files, grep with safety checks
+8. **workspace.py** — Workspace manager: file listing, content reading, context inlining
+9. **classifier.py** — Keyword-based task classification
+10. **matcher.py** — Weighted capability scoring and agent selection
+11. **server.py** — Flask web GUI + REST API server
+12. **orchestrator.py** — Single-task dispatch (classify→match→execute)
 
 ## Conventions
 
