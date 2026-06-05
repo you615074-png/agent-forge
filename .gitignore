@@ -4,3 +4,5 @@ sessions/
 .DS_Store
 simple_test.txt
 test_output.txt
+.env
+*.env

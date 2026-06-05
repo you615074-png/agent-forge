@@ -1,14 +1,36 @@
 # ============================================================
-# AgentForge — 多 Agent 协作调度平台 配置文件
+# AgentForge — Multi-Agent Orchestration Platform  v0.3
 # ============================================================
-# 修改此文件即可调整 Agent 能力、分类规则、流水线定义
-# 不需要改代码
+#
+# Quick start (all-Claude pipeline — one API key):
+#   1. export ANTHROPIC_API_KEY=sk-ant-xxx
+#   2. pip install -r requirements.txt
+#   3. python forge.py "build a React calculator"
+#
+# To mix providers (GPT review, Gemini tests, etc.):
+#   set the corresponding *_API_KEY env vars and change
+#   each agent's `provider` / `model` fields below.
+# ============================================================
 
-# ── 你的 Agent 军团 ──
+# ── Global API settings ──
+api:
+  base_delay_ms: 500
+  max_retries: 2
+  timeout_seconds: 300
+
+# ── Agent Legion ──
 agents:
-  opencode:
-    description: "DeepSeek — 主力编码，全栈开发"
-    cli: "opencode"
+
+  coder:
+    description: "Claude Opus 4.8 — primary developer, full-stack"
+    provider: anthropic
+    model: claude-opus-4-8
+    api_key_env: ANTHROPIC_API_KEY
+    system_prompt: |
+      You are an expert software engineer. Write clean, well-structured,
+      production-quality code. Include comments for non-obvious logic.
+      Prefer standard libraries over third-party dependencies.
+      When asked to create a project, produce complete, runnable files.
     capabilities:
       coding: 0.95
       architecture: 0.90
@@ -26,9 +48,22 @@ agents:
       - node.js
       - python
 
-  claudecode:
-    description: "GLM — 审查官 + 技术分析 + 备选编码"
-    cli: "claude"
+  reviewer:
+    description: "Claude Sonnet 4.6 — code reviewer + technical analysis"
+    provider: anthropic
+    model: claude-sonnet-4-6
+    api_key_env: ANTHROPIC_API_KEY
+    system_prompt: |
+      You are a thorough code reviewer. For every file you examine:
+      1. Identify bugs, edge cases, and logic errors
+      2. Flag security vulnerabilities (injection, auth, data leaks)
+      3. Suggest performance improvements
+      4. Note style/readability issues
+
+      Be specific — reference exact lines or patterns in the code.
+      If you find ANY issues that need fixing, append __HAS_ISSUES__
+      to the END of your response. If the code is perfect, say
+      "Code review passed — no issues found."
     capabilities:
       coding: 0.72
       architecture: 0.75
@@ -42,9 +77,19 @@ agents:
     tech_preference:
       - any
 
-  codex:
-    description: "GPT — Bug修复专家 + 备选编码(配额有限)"
-    cli: "codex"
+  bugfixer:
+    description: "Claude Sonnet 4.6 — bug fix specialist"
+    provider: anthropic
+    model: claude-sonnet-4-6
+    api_key_env: ANTHROPIC_API_KEY
+    system_prompt: |
+      You are a bug-fixing specialist. Given a code review that identifies
+      issues, fix every problem listed. For each fix:
+      1. Explain what was wrong (1-2 lines)
+      2. Provide the corrected code
+
+      Preserve the original code's style and structure. Do not introduce
+      new features — only fix the issues identified in the review.
     capabilities:
       coding: 0.75
       architecture: 0.55
@@ -58,9 +103,21 @@ agents:
     tech_preference:
       - any
 
-  agy:
-    description: "Gemini — 测试编写 + 质量验证"
-    cli: "agy"
+  tester:
+    description: "Claude Haiku 4.5 — test writer + quality verification"
+    provider: anthropic
+    model: claude-haiku-4-5
+    api_key_env: ANTHROPIC_API_KEY
+    system_prompt: |
+      You are a test engineer. Write comprehensive tests for the provided
+      code. Include:
+      1. Unit tests for core functions/methods
+      2. Edge case coverage (empty inputs, nulls, boundary values)
+      3. Basic integration tests where applicable
+
+      Use the project's existing test framework if one exists; otherwise,
+      use pytest (Python), Jest (JS/TS), or the standard testing library
+      for the language in use.
     capabilities:
       coding: 0.65
       architecture: 0.60
@@ -75,45 +132,33 @@ agents:
     tech_preference:
       - any
 
-# ── 任务分类规则 ──
-# 按顺序匹配，命中即返回。越靠前优先级越高。
-# 原则：具体类型在前，通用类型在后
+# ── Task Classification Rules ──
 classifier:
   rules:
     - type: testing
       keywords: ["测试", "test", "用例", "验证", "验收", "spec", "单元测试"]
       targets: []
-
     - type: review
       keywords: ["审查", "review", "检查", "有什么问题", "code review", "check", "audit", "inspect"]
       targets: []
-
     - type: bugfix
       keywords: ["修复", "bug", "报错", "异常", "不对", "坏了", "解决", "fix", "error", "broken", "crash"]
       targets: []
-
     - type: refactor
       keywords: ["重构", "优化", "改进", "提升", "整理", "refactor", "optimize", "improve"]
       targets: []
-
     - type: documentation
       keywords: ["文档", "注释", "readme", "document", "说明", "docs", "documentation"]
       targets: []
-
     - type: analysis
       keywords: ["分析", "解释", "为什么", "原理", "对比", "选型", "建议", "analyze", "explain", "compare"]
       targets: []
-
     - type: coding
       keywords: ["写", "开发", "实现", "新建", "创建", "搭建", "生成", "写个", "build", "create", "implement", "develop", "write", "make", "code", "add", "编写"]
       targets: []
-
-  # 兜底：什么都没匹配到时
   fallback: coding
 
-# ── 任务类型 → 能力维度权重 ──
-# 用于计算每个 Agent 的匹配得分
-# 经验证：coding→opencode / review→claudecode / bugfix→codex / testing→agy / analysis→claudecode / refactor→opencode / documentation→claudecode
+# ── Task-Type → Capability-Weight Mapping ──
 match_weights:
   coding:
     coding: 1.0
@@ -144,65 +189,67 @@ match_weights:
     reasoning: 0.5
     review: 0.3
 
-# ── 执行配置 ──
+# ── Execution Config ──
 executor:
-  timeout_seconds: 120        # 单个 Agent 超时
-  work_dir: "./sessions"      # 工作目录根路径
+  timeout_seconds: 300
+  work_dir: "./sessions"
 
-# ── 流水线定义 (v0.2) ──
+# ── Pipeline: Full Development Cycle ──
 pipelines:
   full_dev_cycle:
-    description: "完整开发周期：编码 → 审查 → 修复(条件) → 测试"
+    description: "Code → Review → Fix(conditional) → Test"
     stages:
       - id: coding
         type: coding
         prompt: '{original_task}'
-
       - id: review
         type: review
         prompt: |
-          原始任务: {original_task}
+          Original task: {original_task}
 
-          以下代码已写入工作目录，请审查：
+          The following files were produced by the coding stage and are
+          available in the working directory:
+
           {previous_files}
 
-          请逐一审查这些文件，指出代码问题、安全隐患和改进建议。
-          如果发现了任何需要修复的问题，请在回复末尾添加标记：
+          Review each file thoroughly. Identify bugs, security issues,
+          performance problems, and style concerns. Be specific.
 
-          __HAS_ISSUES__
-
-          如果代码完全没问题，请回复"代码审查通过，未发现问题"即可。
+          If you find ANY issues that need fixing, append __HAS_ISSUES__
+          at the very end of your response. If everything looks good, say
+          "Code review passed — no issues found."
         pass_files: true
-
       - id: bugfix
         type: bugfix
         prompt: |
-          原始任务: {original_task}
+          Original task: {original_task}
 
-          代码审查发现了以下问题：
+          The code review identified these issues:
 
           {previous_stdout}
 
-          项目文件位于工作目录中：
+          All project files are in the working directory:
           {all_files}
 
-          请逐一修复上述所有问题。
+          Fix every issue listed above. For each fix, explain what was
+          wrong and provide the corrected code.
         pass_files: true
         condition:
           stage: review
           marker: "__HAS_ISSUES__"
           fallback_check: true
-
       - id: testing
         type: testing
         prompt: |
-          原始任务: {original_task}
+          Original task: {original_task}
 
-          项目文件位于工作目录中：
+          Project files in working directory:
           {all_files}
 
-          已完成阶段摘要:
+          Completed stages summary:
           {stages_summary}
 
-          请为核心业务逻辑编写全面的测试用例，包括单元测试和必要的集成测试。
+          Write comprehensive tests for the core business logic. Include
+          unit tests and basic integration tests. Use the appropriate
+          test framework for the project's language.
         pass_files: true

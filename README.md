@@ -1,177 +1,192 @@
-# AgentForge — 多 Agent 协作调度平台 v0.2
+# AgentForge — Multi-Agent Collaboration Platform v0.3
 
-> 本地 CLI Agent 智能分发调度 | 单任务 + 4 阶段流水线 | 零依赖框架
+> API-driven multi-agent orchestration | Single-task + 4-stage pipeline | One API key is all you need
 
 ---
 
-## 是什么
+## What
 
-把你在本地跑的 4 个 CLI Agent 串成一个智能调度系统。
+A framework that chains multiple LLM agents into a structured development pipeline — **using API calls instead of external CLI tools**.
 
 ```
-forge "用 React 写一个计算器"
+forge "Build a React calculator"
         │
         ▼
 ┌──────────────────────────────────────────────┐
 │              AgentForge                       │
 │                                              │
-│  Stage 1: coding  → opencode  (DeepSeek)     │
-│  Stage 2: review  → claudecode (GLM)         │
-│  Stage 3: bugfix  → codex     (GPT)          │
-│  Stage 4: testing → agy       (Gemini)       │
+│  Stage 1: coding  → Claude Opus 4.8          │
+│  Stage 2: review  → Claude Sonnet 4.6        │
+│  Stage 3: bugfix  → Claude Sonnet 4.6        │
+│  Stage 4: testing → Claude Haiku 4.5         │
 │                                              │
-│  共享工作目录     上下文自动传递     归档存档   │
+│  Shared workdir   Context auto-pass   Archive │
 └──────────────────────────────────────────────┘
 ```
 
-**不是让 Agent 互相聊天**，而是任务自动路由 → Agent 接力干活 → 汇总结果。
+**Not about agents chatting with each other** — deterministic task routing → agent relay → result aggregation.
+
+**v0.3**: Replaced CLI subprocess calls with direct API invocation. Zero external CLI tools required.
 
 ---
 
-## 快速开始
+## Quick Start
 
 ```bash
-# 1. 克隆
+# 1. Clone
 git clone https://github.com/you615074-png/agent-forge.git
 cd agent-forge
 
-# 2. 安装唯一依赖
-pip install pyyaml
+# 2. Install
+pip install -r requirements.txt
 
-# 3. 一行开干
-py forge.py --mock "用 React 写一个计算器"    # mock 先试
-py forge.py "用 React 写一个计算器"            # 真实执行
+# 3. Set your API key (all-Claude pipeline needs just one)
+#    Windows PowerShell:
+$env:ANTHROPIC_API_KEY = "sk-ant-xxx"
+#    Linux/macOS:
+export ANTHROPIC_API_KEY=sk-ant-xxx
+
+# 4. Run
+python forge.py --mock "build a hello world web app with Flask"  # dry run first
+python forge.py "build a hello world web app with Flask"          # real execution
 ```
 
 ---
 
-## 使用
+## Usage
 
-### `forge` 智能启动器（推荐）
+### `forge` Smart Launcher (recommended)
 
 ```bash
-forge "build a login page"          # 走流水线（默认）
-forge -s "fix the broken middleware" # 强制单任务
-forge --mock "test"                 # 模拟模式
-forge                                # 交互 REPL
+python forge.py "build a login page"          # pipeline (default)
+python forge.py -s "fix the broken middleware" # single task
+python forge.py --mock "test"                 # dry-run mode
+python forge.py                                # interactive REPL
 ```
 
-### 交互 REPL
+### Interactive REPL
 
 ```bash
-forge> build a calculator           # 流水线
-forge> s fix the auth bug           # 单任务
-forge> mock on                      # 切 mock
+forge> build a calculator           # pipeline
+forge> s fix the auth bug           # single task
+forge> mock on                      # toggle mock mode
+forge> help
 forge> quit
 ```
 
-### 原始 CLI（仍可用）
+### Direct CLI (also works)
 
 ```bash
-# 流水线模式
+# Pipeline mode
 python orchestrator.py --pipeline full_dev_cycle "your task"
 
-# 单任务模式（v0.1 兼容）
+# Single-task mode (v0.1 compatible)
 python orchestrator.py "your task"
 ```
 
 ---
 
-## Agent 军团
+## Agent Legion
 
-| Agent | 模型 | 角色 | 核心能力 |
+Default config uses **all-Anthropic** — one API key runs the entire pipeline:
+
+| Agent | Model | Role | Core Strength |
 |---|---|---|---|
-| opencode | DeepSeek | 主力编码 + 全栈开发 | coding 0.95 / architecture 0.90 |
-| claudecode | GLM | 代码审查 + 技术分析 | review 0.95 / reasoning 0.92 |
-| codex | GPT | Bug 修复（配额保护） | debugging 0.92 / quick_fix 0.95 |
-| agy | Gemini | 测试编写 + 质量验证 | testing 0.95 / verification 0.95 |
+| coder | Claude Opus 4.8 | Full-stack development | coding 0.95 / architecture 0.90 |
+| reviewer | Claude Sonnet 4.6 | Code review + analysis | review 0.95 / reasoning 0.92 |
+| bugfixer | Claude Sonnet 4.6 | Bug fixing (conditional) | debugging 0.92 / quick_fix 0.95 |
+| tester | Claude Haiku 4.5 | Test writing + QA | testing 0.95 / verification 0.95 |
 
-**GPT 配额保护**：codex 仅在 bugfix 类型胜出，其他任务类型不会匹配到它。
+### Mix Providers (optional)
 
----
-
-## 流水线设计
-
-```
-coding (DeepSeek)  ──→  review (GLM)  ──→  bugfix (GPT)  ──→  testing (Gemini)
-                                          ↑                    │
-                                    仅当审查发现问题时    共享工作目录中接力
-```
-
-每个阶段产出的文件对后续阶段可见，上下文通过 prompt 模板自动传递。
-
----
-
-## 文件结构
-
-```
-agent-forge/
-├── forge.py              # 智能启动器 + 交互 REPL
-├── forge.bat             # Windows 命令行包装
-├── orchestrator.py       # 主入口（双路径调度）
-├── pipeline.py           # 流水线执行引擎 (v0.2)
-├── classifier.py         # 关键词分类器
-├── matcher.py            # 能力加权匹配引擎
-├── executor.py           # CLI 执行器 + 会话管理
-├── forge.yaml            # 全局配置（Agent/规则/权重/流水线）
-└── sessions/             # 每次任务的完整存档
-    └── pipeline-20260522-190000-a1b2c3d4/
-        ├── _stage_coding_prompt.txt
-        ├── _stage_coding_output.txt
-        ├── _stage_review_prompt.txt
-        ├── ...
-        ├── pipeline_result.json
-        └── src/           # Agent 产出的实际代码
-```
-
----
-
-## 配置
-
-所有配置在 `forge.yaml` 中，不需要改代码：
+Each agent can use a different provider — just edit `forge.yaml`:
 
 ```yaml
-# 添加新 Agent
 agents:
-  my_new_agent:
-    cli: "my_cli_command"
-    capabilities:
-      coding: 0.80
-      review: 0.60
+  coder:
+    provider: anthropic        # Claude
+    model: claude-opus-4-8
+    api_key_env: ANTHROPIC_API_KEY
 
-# 添加新流水线
+  bugfixer:
+    provider: openai           # GPT
+    model: gpt-5
+    api_key_env: OPENAI_API_KEY
+
+  tester:
+    provider: gemini           # Gemini
+    model: gemini-2.5-pro
+    api_key_env: GEMINI_API_KEY
+```
+
+Supported providers: `anthropic` | `openai` | `gemini` | `deepseek`
+
+---
+
+## Pipeline Design
+
+```
+coding (Opus)  ──→  review (Sonnet)  ──→  bugfix (Sonnet)  ──→  testing (Haiku)
+                                          ↑  conditional           │
+                                     only if review finds issues   │
+                                     (__HAS_ISSUES__ marker)       │
+                                                             shared workdir relay
+```
+
+Each stage's files are visible to subsequent stages. Context passes automatically through prompt templates.
+
+---
+
+## Configuration
+
+Everything lives in `forge.yaml` — no code changes needed:
+
+```yaml
+# Add a new agent
+agents:
+  my_agent:
+    provider: anthropic
+    model: claude-sonnet-4-6
+    api_key_env: ANTHROPIC_API_KEY
+    system_prompt: "You are a helpful assistant..."
+    capabilities:
+      coding: 0.85
+      review: 0.70
+
+# Add a new pipeline
 pipelines:
   my_pipeline:
     stages:
       - id: step1
         type: coding
-        prompt: "{original_task}"
+        prompt: '{original_task}'
       - id: step2
         type: review
-        prompt: "审查: {all_files}"
+        prompt: 'Review: {all_files}'
 ```
 
 ---
 
-## 设计原则
+## Design Principles
 
-1. **调度器是死程序，不是 Agent** — 关键词 + 加权匹配，不做 AI 决策
-2. **每次调用是新会话** — `subprocess.run([cli, task])`，用完即走
-3. **成果在磁盘上** — 所有 Agent 共享工作目录，代码产出直接可见
-4. **流水线阶段跳过分类器** — 阶段类型已在 YAML 声明，不走路由避免误判
-5. **失败不阻断** — 任一阶段失败继续后续，最终汇总标状态
+1. **Scheduler is a dead program, not an agent** — keyword + weighted matching, no AI decisions in routing
+2. **Each invocation is a fresh call** — stateless API requests, no session persistence
+3. **Outputs land on disk** — all agents share a working directory, code output is directly visible
+4. **Pipeline stages skip the classifier** — stage types are declared in YAML, no routing guesswork
+5. **Failure doesn't block** — any stage failure continues to subsequent stages, final summary reports status
 
 ---
 
-## 路线图
+## Roadmap
 
-| 版本 | 功能 | 状态 |
+| Version | Feature | Status |
 |---|---|---|
-| v0.1 | 单任务分发（分类+匹配+执行） | DONE |
-| v0.2 | 流水线接力 + forge 启动器 + runner-up 降级 | DONE |
-| v0.3 | 多方案对比（同任务发给所有 Agent） | TODO |
-| v0.4 | 上下文存档 + 历史回溯 + 断点恢复 | TODO |
-| v0.5 | 自我进化权重（根据成功率调整） | TODO |
+| v0.1 | Single-task dispatch (classify + match + execute) | DONE |
+| v0.2 | Pipeline relay + forge launcher + runner-up fallback | DONE |
+| v0.3 | API-driven execution (Anthropic/OpenAI/Gemini/DeepSeek) | DONE |
+| v0.4 | Multi-plan comparison (same task → all agents) | TODO |
+| v0.5 | Context archiving + history replay + checkpoint resume | TODO |
+| v0.6 | Self-evolving weights (adjust based on success rate) | TODO |
 
 ---
 

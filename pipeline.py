@@ -168,13 +168,13 @@ def run_pipeline(pipeline_name: str, original_task: str,
 
         # 执行
         agent_config = agents[selected_agent]
-        cli_command = agent_config["cli"]
+        exec_label = agent_config.get("provider") or agent_config.get("cli", "?")
 
-        print(f"\nExec: {selected_agent} ({cli_command})")
+        print(f"\nExec: {selected_agent} ({exec_label})")
 
         result = execute(
             agent_name=selected_agent,
-            cli_command=cli_command,
+            agent_config=agent_config,
             task=prompt,
             work_dir=work_dir_root,
             timeout=timeout,
@@ -189,7 +189,7 @@ def run_pipeline(pipeline_name: str, original_task: str,
             runner_agent = agents[runner]
             result = execute(
                 agent_name=runner,
-                cli_command=runner_agent["cli"],
+                agent_config=runner_agent,
                 task=prompt,
                 work_dir=work_dir_root,
                 timeout=timeout,

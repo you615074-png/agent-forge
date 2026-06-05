@@ -98,25 +98,25 @@ def dispatch(task: str, mock: bool = False):
 
     # Step 3: 执行
     agent = agents[selected]
-    cli_command = agent["cli"]
+    exec_label = agent.get("provider") or agent.get("cli", "?")
     work_dir = os.path.join(
         os.path.dirname(__file__),
         exec_config.get("work_dir", "./sessions")
     )
     timeout = exec_config.get("timeout_seconds", 120)
 
-    print(f"Exec:     {selected} ({cli_command})")
+    print(f"Exec:     {selected} ({exec_label})")
     print(f"   timeout: {timeout}s | work_dir: {work_dir}")
     print()
 
-    result = execute(selected, cli_command, task, work_dir, timeout)
+    result = execute(selected, agent, task, work_dir, timeout)
 
     # runner-up 降级：最佳 Agent 失败时自动换第二名
     if not result["success"] and match_result.get("runner_up"):
         runner = match_result["runner_up"]
         print(f"   [FALLBACK] {selected} failed, trying {runner}...")
         runner_agent = agents[runner]
-        result = execute(runner, runner_agent["cli"], task, work_dir, timeout)
+        result = execute(runner, runner_agent, task, work_dir, timeout)
         if result["success"]:
             selected = runner
 

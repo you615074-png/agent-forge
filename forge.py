@@ -31,7 +31,7 @@ def _run_single_wrapper(task: str, mock: bool):
 
 
 def _print_cli_help():
-    print("AgentForge v0.2")
+    print("AgentForge v0.3")
     print()
     print("用法:")
     print('  forge "task"              # 流水线 (默认)')
@@ -67,7 +67,7 @@ def _print_repl_help():
 def interactive_mode():
     """交互 REPL 模式"""
     print("=" * 50)
-    print("  AgentForge v0.2 — Interactive Mode")
+    print("  AgentForge v0.3 — Interactive Mode")
     print("=" * 50)
     print("  Default: pipeline | s=  single | mock on/off")
     print("  Type 'help' or 'quit'")
