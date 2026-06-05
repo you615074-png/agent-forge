@@ -215,14 +215,16 @@ def _execute_api(
     timeout: int,
     stage_prefix: Optional[str],
 ) -> dict:
-    """Run an agent via LLM API."""
+    """Run an agent via LLM API with tool_use support (v0.4)."""
     from api_client import create_provider
+    from tools import get_tools_for_stage
 
     api_key = agent_config.get("api_key") or agent_config.get("api_key_env", "")
     model = agent_config.get("model", "")
     system_prompt = agent_config.get("system_prompt", None)
     base_delay_ms = agent_config.get("base_delay_ms", 500)
     max_retries = agent_config.get("max_retries", 2)
+    max_turns = agent_config.get("max_turns", 10)
 
     start_time = datetime.now()
 
@@ -237,7 +239,17 @@ def _execute_api(
             max_retries=max_retries,
         )
 
-        response_text = provider.chat(task)
+        # ── v0.4: Tool-enabled execution ──
+        # Map stage_prefix to stage type for tool selection
+        stage_type = stage_prefix if stage_prefix else "coding"
+        tools = get_tools_for_stage(stage_type)
+
+        response_text, tool_files = provider.chat_with_tools(
+            task=task,
+            tools=tools,
+            workspace_dir=session_dir,
+            max_turns=max_turns,
+        )
 
         duration_ms = int(
             (datetime.now() - start_time).total_seconds() * 1000
@@ -248,6 +260,7 @@ def _execute_api(
             0, duration_ms, response_text, stderr="",
         )
 
+        # Extract code blocks as fallback (tool-created files take precedence)
         extracted_files = _extract_code_blocks(
             response_text, session_dir, stage_prefix
         )
@@ -258,7 +271,15 @@ def _execute_api(
             exclude_prefixes=["_stage_"] if stage_prefix else None,
         )
 
+        # Merge tool files + extracted code blocks
         seen = {f["path"] for f in produced_files}
+        for tf in tool_files:
+            if tf["path"] not in seen:
+                fullpath = os.path.join(session_dir, tf["path"])
+                if os.path.isfile(fullpath):
+                    tf["size"] = os.path.getsize(fullpath)
+                    produced_files.append(tf)
+                    seen.add(tf["path"])
         for ef in extracted_files:
             if ef["path"] not in seen:
                 produced_files.append(ef)

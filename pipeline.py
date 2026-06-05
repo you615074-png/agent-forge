@@ -229,9 +229,10 @@ def run_pipeline(pipeline_name: str, original_task: str,
 
 
 def _build_prompt(template: str, ctx: dict, stage_id: str) -> str:
-    """将模板中的占位符替换为上下文实际值"""
+    """Replace template placeholders with inline context values (v0.4)."""
     previous_stage = ctx.get("previous_stage")
     prev_data = ctx["stages"].get(previous_stage) if previous_stage else None
+    session_dir = ctx.get("session_dir", "")
 
     prompt = template.replace("{original_task}", ctx["original_task"])
     prompt = prompt.replace("{stage_id}", stage_id)
@@ -245,20 +246,19 @@ def _build_prompt(template: str, ctx: dict, stage_id: str) -> str:
         )
         prompt = prompt.replace(
             "{previous_files}",
-            _format_file_list(prev_data.get("files", []))
+            _inline_files(session_dir, prev_data.get("files", []))
         )
     else:
         prompt = prompt.replace("{previous_agent}", "(none)")
         prompt = prompt.replace("{previous_stdout}", "")
         prompt = prompt.replace("{previous_files}", "(none)")
 
-    # 所有阶段的文件汇总
+    # All stages' files merged
     all_files: list = []
     for sdata in ctx.get("stages", {}).values():
         all_files.extend(sdata.get("files", []))
-    prompt = prompt.replace("{all_files}", _format_file_list(all_files))
+    prompt = prompt.replace("{all_files}", _inline_files(session_dir, all_files))
 
-    # 所有阶段的上下文摘要
     prompt = prompt.replace(
         "{stages_summary}",
         _format_stages_summary(ctx["stages"])
@@ -267,8 +267,29 @@ def _build_prompt(template: str, ctx: dict, stage_id: str) -> str:
     return prompt
 
 
+def _inline_files(session_dir: str, files: list) -> str:
+    """Inline actual file contents into prompt (v0.4).
+
+    Falls back to path+size list if session_dir is unavailable.
+    """
+    if not files:
+        return "(no files produced)"
+
+    if not session_dir or not os.path.isdir(session_dir):
+        return _format_file_list(files)
+
+    from workspace import inline_workspace_files
+    # Only inline the specific files from this stage, not all workspace files
+    paths = [f["path"] for f in files]
+    return inline_workspace_files(
+        session_dir,
+        pick=paths,
+        max_total_bytes=24000,
+    )
+
+
 def _format_file_list(files: list) -> str:
-    """格式化文件列表为字符串"""
+    """Fallback: format file list as path+size."""
     if not files:
         return "(none)"
     lines = []

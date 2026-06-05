@@ -87,6 +87,95 @@ class BaseProvider(ABC):
         """
         ...
 
+    def chat_with_tools(
+        self,
+        task: str,
+        tools: list[dict],
+        workspace_dir: str = ".",
+        max_turns: int = 10,
+    ) -> tuple[str, list[dict]]:
+        """
+        Multi-turn agent loop with tool use. The agent can call tools
+        (read_file, write_file, bash, etc.) to complete the task.
+
+        Returns (final_response_text, created_files).
+
+        Override in subclasses to match provider-native tool formats.
+        The default implementation uses the OpenAI/DeepSeek tool format.
+        """
+        raise NotImplementedError(
+            f"chat_with_tools is not implemented for {type(self).__name__}. "
+            f"Use a provider that supports tool calling (openai, deepseek, anthropic)."
+        )
+
+    def _run_tool_loop(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        workspace_dir: str,
+        max_turns: int,
+        make_request,
+    ) -> tuple[str, list[dict]]:
+        """
+        Generic tool_use loop shared by OpenAI-format providers.
+
+        make_request: callable(messages, tools) → response dict
+        """
+        from tools import execute_tool
+        created_files: list[dict] = []
+
+        for turn in range(max_turns):
+            resp_data = make_request(messages, tools)
+            choice = resp_data["choices"][0]
+            msg = choice.get("message", {})
+
+            # Build assistant message for history
+            assistant_msg = {"role": "assistant"}
+            if msg.get("content"):
+                assistant_msg["content"] = msg["content"]
+            else:
+                assistant_msg["content"] = None
+            if msg.get("tool_calls"):
+                assistant_msg["tool_calls"] = msg["tool_calls"]
+            messages.append(assistant_msg)
+
+            # If the model returns final text (no tool calls), we're done
+            if not msg.get("tool_calls"):
+                return (msg.get("content") or "").strip(), created_files
+
+            # Execute each tool call
+            for tc in msg["tool_calls"]:
+                fn = tc.get("function", {})
+                tool_name = fn.get("name", "")
+                try:
+                    args = __import__("json").loads(fn.get("arguments", "{}"))
+                except Exception:
+                    args = {}
+
+                result = execute_tool(tool_name, args, workspace_dir)
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", ""),
+                    "content": result,
+                })
+
+                # Track created files
+                if tool_name == "write_file":
+                    path = args.get("path", "")
+                    if path:
+                        created_files.append({
+                            "path": path,
+                            "source": "tool",
+                        })
+
+        # Max turns exhausted — return whatever the last message said
+        last = messages[-1]
+        content = last.get("content", "")
+        if isinstance(content, str) and content:
+            return content.strip(), created_files
+        return "(agent reached max turns without finishing)", created_files
+
     # ── shared HTTP helpers ──
 
     def _post_json(self, url: str, payload: dict, headers: dict) -> httpx.Response:
@@ -175,6 +264,95 @@ class AnthropicProvider(BaseProvider):
         resp = self._post_json(self.BASE_URL, payload, headers)
         return self._handle_response(resp)
 
+    def chat_with_tools(
+        self,
+        task: str,
+        tools: list[dict],
+        workspace_dir: str = ".",
+        max_turns: int = 10,
+    ) -> tuple[str, list[dict]]:
+        """Multi-turn agent loop with Anthropic native tool_use."""
+        import json as _json
+        from tools import execute_tool
+
+        api_key = self._resolve_api_key(self.api_key)
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+
+        # Convert OpenAI-format tools to Anthropic format
+        anthropic_tools = []
+        for t in tools:
+            fn = t.get("function", {})
+            anthropic_tools.append({
+                "name": fn.get("name", ""),
+                "description": fn.get("description", ""),
+                "input_schema": fn.get("parameters", {}),
+            })
+
+        messages: list = [{"role": "user", "content": task}]
+        created_files: list[dict] = []
+
+        for turn in range(max_turns):
+            payload = {
+                "model": self.model,
+                "max_tokens": 4096,
+                "messages": messages,
+                "tools": anthropic_tools,
+            }
+            if self.system_prompt:
+                payload["system"] = self.system_prompt
+
+            resp = self._post_json(self.BASE_URL, payload, headers)
+            if resp.status_code != 200:
+                raise RuntimeError(
+                    f"Anthropic API error {resp.status_code}: {resp.text[:500]}"
+                )
+            data = resp.json()
+
+            # Process content blocks
+            text_blocks = []
+            tool_use_blocks = []
+            for block in data.get("content", []):
+                if block.get("type") == "text":
+                    text_blocks.append(block.get("text", ""))
+                elif block.get("type") == "tool_use":
+                    tool_use_blocks.append(block)
+
+            # Add assistant response to messages
+            messages.append({"role": "assistant", "content": data["content"]})
+
+            # If no tool_use blocks, agent is done
+            if not tool_use_blocks:
+                return "\n".join(text_blocks).strip(), created_files
+
+            # Execute tools and send back results
+            tool_results = []
+            for tb in tool_use_blocks:
+                tool_name = tb.get("name", "")
+                try:
+                    args = tb.get("input", {})
+                except Exception:
+                    args = {}
+                result = execute_tool(tool_name, args, workspace_dir)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tb.get("id", ""),
+                    "content": result,
+                })
+
+                if tool_name == "write_file":
+                    path = args.get("path", "")
+                    if path:
+                        created_files.append({"path": path, "source": "tool"})
+
+            messages.append({"role": "user", "content": tool_results})
+
+        # Max turns
+        return "(agent reached max turns without finishing)", created_files
+
     def _build_request(self, task: str) -> dict:
         body: dict = {
             "model": self.model,
@@ -223,6 +401,44 @@ class OpenAIProvider(BaseProvider):
         payload = self._build_request(task)
         resp = self._post_json(self.BASE_URL, payload, headers)
         return self._handle_response(resp)
+
+    def chat_with_tools(
+        self,
+        task: str,
+        tools: list[dict],
+        workspace_dir: str = ".",
+        max_turns: int = 10,
+    ) -> tuple[str, list[dict]]:
+        """Multi-turn agent loop with OpenAI/DeepSeek function calling."""
+        import json as _json
+
+        api_key = self._resolve_api_key(self.api_key)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "content-type": "application/json",
+        }
+
+        messages: list = []
+        if self.system_prompt:
+            messages.append({"role": "system", "content": self.system_prompt})
+        messages.append({"role": "user", "content": task})
+
+        def call_api(msgs, tlz):
+            payload = {
+                "model": self.model,
+                "messages": msgs,
+                "tools": tlz,
+                "tool_choice": "auto",
+                "max_tokens": 4096,
+            }
+            resp = self._post_json(self.BASE_URL, payload, headers)
+            if resp.status_code != 200:
+                raise RuntimeError(
+                    f"{self.__class__.__name__} API error {resp.status_code}: {resp.text[:500]}"
+                )
+            return resp.json()
+
+        return self._run_tool_loop(messages, tools, workspace_dir, max_turns, call_api)
 
     def _build_request(self, task: str) -> dict:
         messages: list = []
