@@ -196,7 +196,7 @@ match_weights:
 # ── Execution Config ──
 executor:
   timeout_seconds: 300
-  work_dir: "./sessions"
+  work_dir: "sessions"
 
 # ── Git Integration (v0.5) ──
 git:

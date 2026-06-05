@@ -119,15 +119,24 @@ class BaseProvider(ABC):
         """
         Generic tool_use loop shared by OpenAI-format providers.
 
+        Collects ALL assistant text across turns so the caller sees the full
+        agent reasoning — not just the last (often brief) sign-off message.
+
         make_request: callable(messages, tools) → response dict
         """
         from tools import execute_tool
         created_files: list[dict] = []
+        assistant_texts: list[str] = []
 
         for turn in range(max_turns):
             resp_data = make_request(messages, tools)
             choice = resp_data["choices"][0]
             msg = choice.get("message", {})
+
+            # Collect assistant text from every turn
+            text = (msg.get("content") or "").strip()
+            if text:
+                assistant_texts.append(text)
 
             # Build assistant message for history
             assistant_msg = {"role": "assistant"}
@@ -141,7 +150,9 @@ class BaseProvider(ABC):
 
             # If the model returns final text (no tool calls), we're done
             if not msg.get("tool_calls"):
-                return (msg.get("content") or "").strip(), created_files
+                # Return ALL collected text, not just the final turn
+                full_text = "\n\n".join(assistant_texts)
+                return full_text, created_files
 
             # Execute each tool call
             for tc in msg["tool_calls"]:
@@ -169,11 +180,9 @@ class BaseProvider(ABC):
                             "source": "tool",
                         })
 
-        # Max turns exhausted — return whatever the last message said
-        last = messages[-1]
-        content = last.get("content", "")
-        if isinstance(content, str) and content:
-            return content.strip(), created_files
+        # Max turns exhausted — return collected text
+        if assistant_texts:
+            return "\n\n".join(assistant_texts), created_files
         return "(agent reached max turns without finishing)", created_files
 
     # ── shared HTTP helpers ──
@@ -294,6 +303,7 @@ class AnthropicProvider(BaseProvider):
 
         messages: list = [{"role": "user", "content": task}]
         created_files: list[dict] = []
+        assistant_texts: list[str] = []
 
         for turn in range(max_turns):
             payload = {
@@ -321,12 +331,18 @@ class AnthropicProvider(BaseProvider):
                 elif block.get("type") == "tool_use":
                     tool_use_blocks.append(block)
 
+            # Collect assistant text from every turn
+            turn_text = "\n".join(text_blocks).strip()
+            if turn_text:
+                assistant_texts.append(turn_text)
+
             # Add assistant response to messages
             messages.append({"role": "assistant", "content": data["content"]})
 
             # If no tool_use blocks, agent is done
             if not tool_use_blocks:
-                return "\n".join(text_blocks).strip(), created_files
+                full_text = "\n\n".join(assistant_texts)
+                return full_text, created_files
 
             # Execute tools and send back results
             tool_results = []
@@ -350,7 +366,9 @@ class AnthropicProvider(BaseProvider):
 
             messages.append({"role": "user", "content": tool_results})
 
-        # Max turns
+        # Max turns — return collected text
+        if assistant_texts:
+            return "\n\n".join(assistant_texts), created_files
         return "(agent reached max turns without finishing)", created_files
 
     def _build_request(self, task: str) -> dict:
