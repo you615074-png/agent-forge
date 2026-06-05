@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentForge — Multi-Agent Orchestrator</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <h1>⚒️ AgentForge <span class="version">v0.5</span></h1>
+        <span class="subtitle">Multi-Agent Pipeline Orchestrator</span>
+      </div>
+      <div class="header-right">
+        <span id="status-dot" class="status-dot offline"></span>
+        <span id="status-text">Disconnected</span>
+        <button class="btn btn-sm" onclick="checkHealth()">↻</button>
+      </div>
+    </header>
+
+    <!-- Main layout -->
+    <div class="main">
+      <!-- Left panel: Input + Config -->
+      <div class="panel panel-left">
+        <!-- Task input -->
+        <section class="card">
+          <h2>🚀 Run Pipeline</h2>
+          <div class="form-group">
+            <label for="task-input">Task Description</label>
+            <textarea id="task-input" rows="4"
+              placeholder="Describe what you want to build...&#10;e.g., Build a REST API with Flask for a todo app"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="pipeline-select">Pipeline</label>
+              <select id="pipeline-select">
+                <option value="full_dev_cycle">Full Dev Cycle</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>&nbsp;</label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="mock-checkbox"> Mock Mode
+              </label>
+            </div>
+          </div>
+          <button id="run-btn" class="btn btn-primary btn-block" onclick="runPipeline()">
+            ▶ Run Pipeline
+          </button>
+        </section>
+
+        <!-- Agents list -->
+        <section class="card">
+          <h2>🤖 Agents</h2>
+          <div id="agents-list" class="agents-list">
+            <span class="muted">Loading...</span>
+          </div>
+        </section>
+
+        <!-- Quick actions -->
+        <section class="card">
+          <h2>⚡ Quick Actions</h2>
+          <div class="quick-actions">
+            <button class="btn btn-outline btn-sm" onclick="quickAction('doctor')">🔍 Doctor</button>
+            <button class="btn btn-outline btn-sm" onclick="quickAction('review')">📝 Review</button>
+            <button class="btn btn-outline btn-sm" onclick="quickAction('test')">🧪 Test</button>
+            <button class="btn btn-outline btn-sm" onclick="quickAction('git-status')">📋 Git Status</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right panel: Progress + Output -->
+      <div class="panel panel-right">
+        <!-- Progress -->
+        <section class="card">
+          <h2>📊 Pipeline Progress</h2>
+          <div id="progress-container" class="progress-container">
+            <div class="progress-stages" id="progress-stages">
+              <span class="muted">Run a pipeline to see progress...</span>
+            </div>
+            <div id="progress-bar-wrapper" class="progress-bar-wrapper hidden">
+              <div id="progress-bar" class="progress-bar"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Output tabs -->
+        <section class="card output-card">
+          <div class="tabs">
+            <button class="tab active" onclick="switchTab('output')">📄 Output</button>
+            <button class="tab" onclick="switchTab('files')">📁 Files</button>
+            <button class="tab" onclick="switchTab('sessions')">📚 Sessions</button>
+            <button class="tab" onclick="switchTab('config')">⚙️ Config</button>
+          </div>
+          <div id="tab-output" class="tab-content active">
+            <pre id="output-view" class="output-view">Waiting for pipeline execution...</pre>
+          </div>
+          <div id="tab-files" class="tab-content">
+            <div id="files-view" class="files-view">
+              <span class="muted">No files to show yet.</span>
+            </div>
+          </div>
+          <div id="tab-sessions" class="tab-content">
+            <div id="sessions-view" class="sessions-view">
+              <span class="muted">Loading sessions...</span>
+            </div>
+          </div>
+          <div id="tab-config" class="tab-content">
+            <pre id="config-view" class="config-view">Loading config...</pre>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>AgentForge v0.5</span>
+      <span>|</span>
+      <a href="https://github.com/you615074-png/agent-forge" target="_blank">GitHub</a>
+      <span>|</span>
+      <span id="api-status">API: checking...</span>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

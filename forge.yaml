@@ -1,15 +1,19 @@
 # ============================================================
-# AgentForge — Multi-Agent Orchestration Platform  v0.3
+# AgentForge — Multi-Agent Orchestration Platform  v0.5
 # ============================================================
 #
 # Quick start (all-Claude pipeline — one API key):
-#   1. export ANTHROPIC_API_KEY=sk-ant-xxx
+#   1. cp .env.example .env  (fill in your API keys)
 #   2. pip install -r requirements.txt
 #   3. python forge.py "build a React calculator"
 #
-# To mix providers (GPT review, Gemini tests, etc.):
-#   set the corresponding *_API_KEY env vars and change
-#   each agent's `provider` / `model` fields below.
+# Or use DeepSeek / OpenAI / Gemini:
+#   set DEEPSEEK_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY
+#   and change each agent's `provider` / `model` fields below.
+#
+# Slash Commands (REPL mode): /help /doctor /init /agents /pipeline ...
+# Web GUI: python forge.py --gui
+# API Server: python forge.py --serve 8080
 # ============================================================
 
 # ── Global API settings ──
@@ -193,6 +197,23 @@ match_weights:
 executor:
   timeout_seconds: 300
   work_dir: "./sessions"
+
+# ── Git Integration (v0.5) ──
+git:
+  auto_commit: false
+  commit_message_template: "AgentForge: {stage_id} — {task_summary}"
+  branch_prefix: "forge/"
+
+# ── Test Feedback Loop (v0.5) ──
+test_loop:
+  enabled: true
+  max_iterations: 3
+  fix_prompt: |
+    The tests you wrote failed with the following output:
+
+    {test_output}
+
+    Fix the failing tests AND the source code if necessary. Make all tests pass.
 
 # ── Pipeline: Full Development Cycle ──
 pipelines:
