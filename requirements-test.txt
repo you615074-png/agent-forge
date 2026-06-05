@@ -1,0 +1,4 @@
+# AgentForge — Test Dependencies
+# Install: pip install -r requirements-test.txt
+pytest>=7.0
+pytest-timeout>=2.0

@@ -37,9 +37,15 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from logging_config import init_logging, get_logger
 from orchestrator import load_config, dispatch
 from pipeline import run_pipeline
 from console import cprint, styled, header, section, Colors, bold, dim, green, cyan, magenta, ok
+
+# Initialize structured logging early
+init_logging()
+
+log = get_logger(__name__)
 
 PIPELINE_NAME = "full_dev_cycle"
 

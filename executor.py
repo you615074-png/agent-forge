@@ -306,7 +306,8 @@ def _execute_api(
             "produced_files": produced_files,
         }
 
-    except Exception as exc:
+    except (ValueError, RuntimeError, OSError, ConnectionError, TimeoutError) as exc:
+        # Expected failure modes: bad API key, network error, timeout, provider error
         duration_ms = int(
             (datetime.now() - start_time).total_seconds() * 1000
         )

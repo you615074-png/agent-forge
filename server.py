@@ -24,7 +24,8 @@ import os
 import json
 import sys
 import threading
-import time
+import hashlib
+import secrets
 from datetime import datetime
 from pathlib import Path
 
@@ -32,7 +33,27 @@ from pathlib import Path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_ROOT)
 
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template
+from logging_config import get_logger
+
+log = get_logger("server")
+
+# ── Auth ──
+API_TOKEN = os.environ.get("AGENTFORGE_API_TOKEN", "")
+SESSION_DIR = os.path.join(PROJECT_ROOT, "sessions")
+
+def _check_auth() -> bool:
+    """Return True if the request is authenticated (or if auth is disabled)."""
+    if not API_TOKEN:
+        return True  # Auth not configured — allow all (local-only assumed)
+    auth_header = request.headers.get("Authorization", "")
+    return auth_header == f"Bearer {API_TOKEN}"
+
+def _require_auth():
+    if not _check_auth():
+        log.warning("Unauthorized API access from %s", request.remote_addr)
+        return jsonify({"error": "unauthorized — set AGENTFORGE_API_TOKEN env var"}), 401
+    return None
 
 
 def create_app() -> Flask:
@@ -42,9 +63,53 @@ def create_app() -> Flask:
         static_folder=os.path.join(PROJECT_ROOT, "static"),
     )
 
-    # ── In-memory session tracking ──
+    # ── Session state (memory + disk) ──
     _sessions: dict[str, dict] = {}
     _lock = threading.Lock()
+
+    def _load_sessions():
+        """Load persisted sessions from disk into memory."""
+        if not os.path.isdir(SESSION_DIR):
+            return
+        for d in os.listdir(SESSION_DIR):
+            summary_path = os.path.join(SESSION_DIR, d, "pipeline_result.json")
+            if os.path.exists(summary_path):
+                try:
+                    with open(summary_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    _sessions[d] = {
+                        "id": d,
+                        "task": data.get("original_task", ""),
+                        "pipeline": data.get("pipeline", "?"),
+                        "status": "completed",
+                        "stages": data.get("stages", {}),
+                        "completed_at": data.get("timestamp", ""),
+                    }
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+    _load_sessions()  # Restore on startup
+
+    def _save_session(session_id: str):
+        """Persist a session to disk for crash recovery."""
+        s = _sessions.get(session_id)
+        if not s:
+            return
+        sess_dir = os.path.join(SESSION_DIR, session_id)
+        os.makedirs(sess_dir, exist_ok=True)
+        summary = {
+            "pipeline": s.get("pipeline", "?"),
+            "original_task": s.get("task", ""),
+            "session_dir": sess_dir,
+            "stages": s.get("stages", {}),
+            "timestamp": datetime.now().isoformat(),
+        }
+        path = os.path.join(sess_dir, "pipeline_result.json")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(summary, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            log.warning("Failed to persist session %s: %s", session_id, e)
 
     @app.route("/")
     def index():
@@ -55,13 +120,17 @@ def create_app() -> Flask:
     def health():
         return jsonify({
             "status": "ok",
-            "version": "0.5",
+            "version": "0.7",
+            "auth_enabled": bool(API_TOKEN),
             "timestamp": datetime.now().isoformat(),
         })
 
     @app.route("/api/config")
     def get_config():
         """Return current forge.yaml configuration (redacted API keys)."""
+        auth_err = _require_auth()
+        if auth_err:
+            return auth_err
         from orchestrator import load_config
         config = load_config()
         # Redact sensitive values
@@ -76,6 +145,9 @@ def create_app() -> Flask:
     @app.route("/api/agents")
     def get_agents():
         """Return agent list with capabilities."""
+        auth_err = _require_auth()
+        if auth_err:
+            return auth_err
         from orchestrator import load_config
         config = load_config()
         agents = config.get("agents", {})
@@ -108,6 +180,10 @@ def create_app() -> Flask:
     @app.route("/api/run", methods=["POST"])
     def run_pipeline_api():
         """Run a pipeline asynchronously and return a session ID."""
+        auth_err = _require_auth()
+        if auth_err:
+            return auth_err
+
         data = request.get_json(force=True)
         task = data.get("task", "").strip()
         pipeline_name = data.get("pipeline", "full_dev_cycle")
@@ -157,6 +233,7 @@ def create_app() -> Flask:
                     s["status"] = "completed"
                     s["completed_at"] = datetime.now().isoformat()
                     s["session_dir"] = pipeline_result.get("session_dir", "") if isinstance(pipeline_result, dict) else ""
+                _save_session(session_id)
                     s["stages"] = {
                         sid: {
                             "id": sd.get("id", sid),
@@ -170,11 +247,13 @@ def create_app() -> Flask:
                         }
                         for sid, sd in stages_dict.items()
                     } if isinstance(stages_dict, dict) else {}
-            except Exception as e:
+            except (ValueError, RuntimeError, OSError) as e:
+                log.error("Pipeline run failed: %s", e)
                 with _lock:
                     s = _sessions.get(session_id, {})
                     s["status"] = "failed"
                     s["error"] = str(e)
+                _save_session(session_id)
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()

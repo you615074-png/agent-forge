@@ -15,9 +15,12 @@ import subprocess
 from datetime import datetime
 from typing import Dict, Any
 
+from logging_config import get_logger
 from matcher import match
 from executor import execute
 from console import (
+
+log = get_logger(__name__)
     cprint, styled, header, section, stage_header, status_line,
     agent_match, file_item, dim, bold, green, red, yellow, cyan, magenta,
     ok, fail, Colors, STAGE_COLORS, Spinner,
@@ -594,9 +597,9 @@ def _git_auto_commit(
             # Probably nothing to commit — that's fine
             pass
     except FileNotFoundError:
-        pass  # Git not installed
-    except Exception:
-        pass  # Silently skip git errors — pipeline shouldn't fail on git issues
+        pass  # Git not installed — non-critical
+    except (OSError, subprocess.SubprocessError) as e:
+        log.warning("Git auto-commit failed: %s", e)
 
 
 # ═══════════════════════════════════════════════════════════════
