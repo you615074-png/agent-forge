@@ -132,6 +132,11 @@ def _style(text: str, fg: str = "", bg: str = "", style: str = "") -> str:
     return f"{prefix}{text}{Colors.RESET}"
 
 
+def styled(text: str, fg: str = "", bg: str = "", style: str = "") -> str:
+    """Public wrapper: return ANSI-styled string, or plain text if colors are off."""
+    return _style(text, fg, bg, style)
+
+
 def cprint(text: str, fg: str = "", bg: str = "", style: str = "", end: str = "\n"):
     """Print colored text to stdout."""
     print(_style(text, fg, bg, style), end=end)

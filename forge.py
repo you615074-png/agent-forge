@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from orchestrator import load_config, dispatch
 from pipeline import run_pipeline
-from console import cprint, header, section, Colors, bold, dim, green, cyan, magenta, ok
+from console import cprint, styled, header, section, Colors, bold, dim, green, cyan, magenta, ok
 
 PIPELINE_NAME = "full_dev_cycle"
 
@@ -139,7 +139,7 @@ def interactive_mode():
 
     while True:
         try:
-            raw = input(f"{Colors.GREEN}forge>{Colors.RESET} ").strip()
+            raw = input(styled("forge> ", fg=Colors.GREEN) + " ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nBye!")
             break

@@ -18,7 +18,7 @@ from typing import Dict, Any
 from matcher import match
 from executor import execute
 from console import (
-    cprint, header, section, stage_header, status_line,
+    cprint, styled, header, section, stage_header, status_line,
     agent_match, file_item, dim, bold, green, red, yellow, cyan, magenta,
     ok, fail, Colors, STAGE_COLORS, Spinner,
 )
@@ -141,8 +141,9 @@ def run_pipeline(pipeline_name: str, original_task: str,
         # ── Classify (from stage definition) ──
         task_type = stage_type
         type_label = _TYPE_NAMES.get(task_type, f"? {task_type}")
-        color = STAGE_COLORS.get(task_type, Colors.WHITE)
-        cprint(f"  {bold('Type:')} {color}{type_label}{Colors.RESET}")
+        stage_color = STAGE_COLORS.get(task_type, Colors.WHITE)
+        cprint(f"  {bold('Type:')} ", end="")
+        cprint(type_label, fg=stage_color, style=Colors.BOLD)
 
         # ── Match ──
         match_result = match(task_type, agents, match_weights)
@@ -171,7 +172,7 @@ def run_pipeline(pipeline_name: str, original_task: str,
             bar = "█" * bar_len + "░" * (20 - bar_len)
             marker = " ◀" if s["name"] == selected_agent else ""
             sc = Colors.GREEN if s["score"] > 0.8 else Colors.YELLOW if s["score"] > 0.5 else Colors.RED
-            print(f"    {s['name']:<14s} {sc}{bar}{Colors.RESET} {s['score']:.2f}{marker}")
+            print(f"    {s['name']:<14s} {styled(bar, fg=sc)} {s['score']:.2f}{marker}")
 
         # ── Execute (with v0.5 enhancements) ──
         result = _execute_stage(

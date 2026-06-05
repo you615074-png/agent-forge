@@ -161,7 +161,9 @@ def cmd_help(args: list, ctx: dict) -> str:
             aliases = ""
             if c.get("aliases"):
                 aliases = dim(f" (/{', /'.join(c['aliases'])})")
-            lines.append(f"  {magenta('/' + c['name']):<22s} {c['description']}{aliases}")
+            # Pad first, then color — avoids ANSI codes breaking column width
+            padded_name = ('/' + c['name']).ljust(20)
+            lines.append(f"  {magenta(padded_name)} {c['description']}{aliases}")
         lines.append("")
 
     lines.extend([
@@ -207,19 +209,19 @@ def cmd_doctor(args: list, ctx: dict) -> str:
     py_ok = sys.version_info >= (3, 9)
     lines.append(f"  {'Python:':<14s} {py_ver}  {ok() if py_ok else fail('need 3.9+')}")
 
-    # Dependencies
+    # Dependencies — key=display-name, value=(pip-package, import-name)
     deps = {
-        "pyyaml": "pyyaml",
-        "httpx": "httpx",
-        "dotenv": "python-dotenv",
-        "flask": "flask",
+        "pyyaml": ("pyyaml",      "yaml"),
+        "httpx":  ("httpx",       "httpx"),
+        "dotenv": ("python-dotenv","dotenv"),
+        "flask":  ("flask",       "flask"),
     }
-    for name, pkg in deps.items():
+    for label, (pip_pkg, import_name) in deps.items():
         try:
-            __import__(pkg.replace("-", "_"))
-            lines.append(f"  {name:<14s} {ok('installed')}")
+            __import__(import_name)
+            lines.append(f"  {label:<14s} {ok('installed')}")
         except ImportError:
-            lines.append(f"  {name:<14s} {fail('missing')} — pip install {pkg}")
+            lines.append(f"  {label:<14s} {fail('missing')} — pip install {pip_pkg}")
 
     # API keys (from config or env)
     config = ctx.get("config", {})
@@ -345,18 +347,19 @@ def cmd_init(args: list, ctx: dict) -> str:
 )
 def cmd_status(args: list, ctx: dict) -> str:
     mock = ctx.get("mock", False)
-    session_dir = ctx.get("session_dir", dim("(none)"))
+    session_dir = ctx.get("session_dir", "")  # raw path, may be empty
     workspace = ctx.get("workspace", os.getcwd())
     model = ctx.get("model", "default")
 
     mock_status = yellow("ON (no API calls)") if mock else green("OFF")
+    session_display = session_dir if session_dir else dim("(none)")
     lines = [
         bold("  AgentForge Status"),
         "",
         f"  Mock mode:    {mock_status}",
         f"  Model:        {cyan(model)}",
         f"  Workspace:    {workspace}",
-        f"  Session dir:  {session_dir}",
+        f"  Session dir:  {session_display}",
     ]
 
     # Show recent sessions
@@ -367,9 +370,10 @@ def cmd_status(args: list, ctx: dict) -> str:
             reverse=True,
         )[:5]
         if sessions:
+            session_basename = os.path.basename(session_dir) if session_dir else ""
             lines.append(f"\n  {bold('Recent sessions')} ({len(sessions)}):")
             for s in sessions[:5]:
-                marker = cyan("●") if s == os.path.basename(session_dir or "") else dim("○")
+                marker = cyan("●") if s == session_basename else dim("○")
                 lines.append(f"    {marker} {dim(s)}")
 
     return "\n".join(lines)
@@ -1288,7 +1292,7 @@ def _get_default_forge_yaml() -> str:
 
     executor:
       timeout_seconds: 300
-      work_dir: "./sessions"
+      work_dir: "sessions"
 
     # ── Git integration (new in v0.5) ──
     git:
