@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AgentForge v0.5.1 — Smart Launcher
+AgentForge v0.7.0 — Smart Launcher
 
 用法:
   forge "task"              # 流水线 (默认)
@@ -74,8 +74,9 @@ def _print_cli_help():
     print()
     cprint("  Slash Commands:", style=Colors.BOLD)
     print(f"  {magenta('/help')}, {magenta('/doctor')}, {magenta('/init')}, {magenta('/status')}, {magenta('/agents')}, {magenta('/pipeline')},")
-    print(f"  {magenta('/model')}, {magenta('/switch')}, {magenta('/review')}, {magenta('/test')}, {magenta('/file')},")
-    print(f"  {magenta('/workspace')}, {magenta('/config')}, {magenta('/git')}, {magenta('/memory')}, {magenta('/save')}, {magenta('/clear')}")
+    print(f"  {magenta('/compare')}, {magenta('/model')}, {magenta('/switch')}, {magenta('/review')}, {magenta('/test')},")
+    print(f"  {magenta('/file')}, {magenta('/workspace')}, {magenta('/config')}, {magenta('/session')},")
+    print(f"  {magenta('/git')}, {magenta('/memory')}, {magenta('/save')}, {magenta('/clear')}")
 
 
 def _print_repl_help():
@@ -95,8 +96,10 @@ def _print_repl_help():
         ("/status",         "Show current session status"),
         ("/agents [name]",  "List agents or show agent detail"),
         ("/pipeline [n] <t>","Run a named pipeline"),
+        ("/compare <task>",  "Compare all agents on one task (v0.6)"),
         ("/model [name]",   "Show or set model"),
         ("/switch [profile]","Switch provider profile"),
+        ("/session [cmd]",   "Manage sessions: list/resume/compact (v0.7)"),
         ("/review [pattern]","Review code in workspace"),
         ("/test [args]",    "Run tests"),
         ("/file <path>",    "View a file with line numbers"),

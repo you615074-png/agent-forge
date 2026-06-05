@@ -502,6 +502,124 @@ def cmd_pipeline(args: list, ctx: dict) -> str:
     return ""  # Pipeline already printed its output
 
 
+# ── /compare ──
+
+@register_command(
+    "compare",
+    description="Run one task through all agents and compare results (v0.6)",
+    aliases=["cmp"],
+    usage="/compare <task>  or  /compare <task> --agents coder,tester",
+    category="agent",
+)
+def cmd_compare(args: list, ctx: dict) -> str:
+    """Multi-plan comparison: same task → all agents → scored ranking."""
+    if not args:
+        return "Usage: /compare <task description>"
+
+    # Parse optional --agents filter
+    agent_filter: list[str] | None = None
+    task_parts: list[str] = []
+    for a in args:
+        if a.startswith("--agents="):
+            agent_filter = a.split("=", 1)[1].split(",")
+        else:
+            task_parts.append(a)
+
+    task = " ".join(task_parts)
+    if not task:
+        return "Usage: /compare <task description>  [--agents=a,b,c]"
+
+    config = ctx.get("config", {})
+    mock = ctx.get("mock", False)
+
+    from compare import compare_plans
+    result = compare_plans(task, config, mock=mock, agents_filter=agent_filter)
+
+    if "error" in result:
+        return fail(result["error"])
+
+    # Update session tracking
+    ctx["session_dir"] = result.get("session_dir", "")
+    ctx["workspace"] = result.get("session_dir", ctx.get("workspace", ""))
+
+    return result.get("summary", "Comparison complete.")
+
+
+# ── /session ──
+
+@register_command(
+    "session",
+    description="Manage sessions: list, resume, compact, rewind (v0.7)",
+    aliases=["sess"],
+    usage="/session [list|resume <id>|compact|rewind|info]",
+    category="general",
+)
+def cmd_session(args: list, ctx: dict) -> str:
+    """Session lifecycle management."""
+    from sessions import (
+        list_sessions, resume_session, compact_sessions,
+        rewind_session, session_info,
+    )
+
+    subcmd = args[0].lower() if args else "list"
+
+    if subcmd == "list":
+        config = ctx.get("config", {})
+        work_dir = os.path.join(
+            os.path.dirname(__file__),
+            config.get("executor", {}).get("work_dir", "sessions")
+        )
+        return list_sessions(work_dir)
+
+    elif subcmd == "resume":
+        if len(args) < 2:
+            return "Usage: /session resume <session-id>"
+        session_id = args[1]
+        config = ctx.get("config", {})
+        mock = ctx.get("mock", False)
+        work_dir = os.path.join(
+            os.path.dirname(__file__),
+            config.get("executor", {}).get("work_dir", "sessions")
+        )
+        return resume_session(session_id, work_dir, config, mock)
+
+    elif subcmd == "compact":
+        config = ctx.get("config", {})
+        work_dir = os.path.join(
+            os.path.dirname(__file__),
+            config.get("executor", {}).get("work_dir", "sessions")
+        )
+        keep_days = int(args[1]) if len(args) > 1 else 7
+        return compact_sessions(work_dir, keep_days=keep_days)
+
+    elif subcmd == "rewind":
+        session_dir = ctx.get("session_dir", "")
+        if not session_dir:
+            return "No active session. Run a pipeline first, then use /session rewind."
+        return rewind_session(session_dir)
+
+    elif subcmd == "info":
+        session_dir = ctx.get("session_dir", "")
+        if not session_dir:
+            session_id = args[1] if len(args) > 1 else ""
+            if session_id:
+                config = ctx.get("config", {})
+                work_dir = os.path.join(
+                    os.path.dirname(__file__),
+                    config.get("executor", {}).get("work_dir", "sessions")
+                )
+                session_dir = os.path.join(work_dir, session_id)
+        if not session_dir or not os.path.isdir(session_dir):
+            return "No session found. Use /session list to see available sessions."
+        return session_info(session_dir)
+
+    else:
+        return (
+            f"Unknown subcommand: {subcmd}\n"
+            f"  Available: list, resume <id>, compact [days], rewind, info [id]"
+        )
+
+
 # ── /model ──
 
 @register_command(
